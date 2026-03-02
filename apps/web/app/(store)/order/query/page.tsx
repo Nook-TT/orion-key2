@@ -76,16 +76,16 @@ export default function OrderQueryPage() {
         () => mockQueryOrders(queryParams)
       )
 
-      // Auto-deliver: PAID 触发发货分配卡密，DELIVERED 幂等返回已分配卡密
+      // Read-only delivery fetch: payment callbacks/admin actions should already complete delivery
       let finalOrders = found
       let finalDeliver: Awaited<ReturnType<typeof orderApi.deliver>> = []
       const deliverableIds = found.filter(o => o.status === "PAID" || o.status === "DELIVERED").map(o => o.id)
       if (deliverableIds.length > 0) {
         finalDeliver = await withMockFallback(
-          () => orderApi.deliver({ order_ids: deliverableIds }),
+          () => Promise.all(deliverableIds.map((id) => orderApi.getDelivery(id))),
           () => mockDeliver(deliverableIds)
         )
-        // deliver 可能将 PAID 变为 DELIVERED，同步更新状态
+        // Sync any newer status already written by the backend
         const statusMap = new Map(finalDeliver.map(d => [d.order_id, d.status]))
         finalOrders = found.map(o => {
           const newStatus = statusMap.get(o.id)

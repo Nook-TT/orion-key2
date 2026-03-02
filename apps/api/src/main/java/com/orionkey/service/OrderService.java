@@ -9,9 +9,9 @@ public interface OrderService {
 
     Map<String, Object> createCartOrder(Map<String, Object> request, UUID userId, String clientIp, String sessionToken);
 
-    Map<String, Object> getOrderStatus(UUID orderId);
+    Map<String, Object> getOrderStatus(UUID orderId, UUID userId, String sessionToken);
 
-    Map<String, Object> refreshOrderStatus(UUID orderId);
+    Map<String, Object> refreshOrderStatus(UUID orderId, UUID userId, String sessionToken);
 
     void expireOrders();
 }

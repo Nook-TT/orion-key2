@@ -6,9 +6,13 @@ import java.util.UUID;
 
 public interface DeliverService {
 
-    List<?> queryOrders(Map<String, Object> request);
+    List<?> queryOrders(Map<String, Object> request, UUID userId, String sessionToken);
 
-    List<?> deliverOrders(Map<String, Object> request);
+    Map<String, Object> getDeliveryResult(UUID orderId, UUID userId, String sessionToken);
 
-    String exportCardKeys(UUID orderId);
+    List<?> deliverOrders(Map<String, Object> request, UUID userId, String sessionToken);
+
+    Map<String, Object> deliverOrderSystem(UUID orderId);
+
+    String exportCardKeys(UUID orderId, UUID userId, String sessionToken);
 }

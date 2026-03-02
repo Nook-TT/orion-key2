@@ -42,12 +42,12 @@ spring:
 
 # JWT
 jwt:
-  secret: ${JWT_SECRET:orion-key-dev-secret-key-must-be-at-least-256-bits-long-for-hs256}
+  secret: ${JWT_SECRET}
   expiration: 86400000  # 24 hours
 
 # Security
 security:
-  password-plain: ${PASSWORD_PLAIN:true}  # true=明文密码(开发用), false=BCrypt(生产用)
+  password-plain: ${PASSWORD_PLAIN:false}  # true=明文密码(开发用), false=BCrypt(生产用)
 
 # Upload
 upload:
@@ -62,5 +62,5 @@ mail:
 # Logging
 logging:
   level:
-    com.orionkey: DEBUG
+    com.orionkey: INFO
     org.springframework.security: WARN

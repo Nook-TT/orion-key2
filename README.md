@@ -22,6 +22,32 @@ Automated Digital Goods Delivery Platform
 
 ---
 
+## 公开发布说明
+
+这是一个可自托管的发卡系统框架仓库，适合部署到你自己的服务器。
+
+- 不包含任何真实生产配置，部署前请先复制 `.env.example` 并填写你自己的参数
+- 不再内置默认管理员账号，首次部署后请手动创建管理员
+- 默认要求使用新的数据库密码、JWT 密钥、支付配置和域名
+- 适合作为二次开发模板、私有分支基础仓库或自建售卡站点框架
+
+---
+
+## 快速开始
+
+1. 复制环境变量模板：
+   `cp .env.example .env`
+2. 编辑 `.env`，替换数据库、JWT、域名、邮件等占位符为你自己的配置
+3. 选择一种启动方式：
+   源码构建：`docker compose up -d --build`
+   镜像部署：`docker compose -f docker-compose.prod.yml up -d`
+4. 配置你自己的反向代理、域名和 SSL（不要直接复用仓库外的服务器配置）
+5. 首次部署后手动创建管理员账号，再进入后台配置支付渠道和站点参数
+
+升级现有实例前，请先阅读 [UPGRADE.md](UPGRADE.md)。
+
+---
+
 ## 截图预览
 
 <details open>
@@ -144,7 +170,7 @@ spring:
     password: ${DB_PASSWORD:your_password}
 ```
 
-首次启动自动建表（`ddl-auto: update`），启动后执行一次初始化 SQL(data.sql文件) 写入管理员账户、站点配置：
+首次启动自动建表（`ddl-auto: update`），启动后执行一次初始化 SQL(`data.sql`) 写入站点配置与演示数据（不再写入默认管理员）：
 
 
 > SQL 内置 `WHERE NOT EXISTS`，多次执行不会产生重复数据。
@@ -233,7 +259,7 @@ pnpm dev:web
 ### 验证
 
 - 健康检查：`GET http://localhost:8083/api/categories`
-- 管理员登录：`admin` / `admin123`
+- 默认不会创建管理员账户，请在部署后手动创建
 
 ---
 

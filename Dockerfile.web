@@ -50,6 +50,12 @@ RUN pnpm install --frozen-lockfile
 # 现在复制实际源码（这一步会在代码变更时重新执行，但依赖层已缓存）
 COPY apps/web/ ./apps/web/
 
+# 构建时注入公开站点地址和服务端回源地址
+ARG BACKEND_URL=http://localhost:8083
+ARG NEXT_PUBLIC_BASE_URL=http://localhost:3000
+ENV BACKEND_URL=$BACKEND_URL
+ENV NEXT_PUBLIC_BASE_URL=$NEXT_PUBLIC_BASE_URL
+
 # 构建 Next.js 生产版本
 # --filter @orion-key/web: pnpm 工作区过滤器，只构建前端包
 # 构建产物在 apps/web/.next/ 目录下

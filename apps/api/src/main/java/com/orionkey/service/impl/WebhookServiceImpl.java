@@ -11,6 +11,7 @@ import com.orionkey.entity.WebhookEvent;
 import com.orionkey.repository.OrderRepository;
 import com.orionkey.repository.PaymentChannelRepository;
 import com.orionkey.repository.WebhookEventRepository;
+import com.orionkey.service.DeliverService;
 import com.orionkey.service.EpayService;
 import com.orionkey.service.WebhookService;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class WebhookServiceImpl implements WebhookService {
     private final OrderRepository orderRepository;
     private final PaymentChannelRepository paymentChannelRepository;
     private final EpayService epayService;
+    private final DeliverService deliverService;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -68,8 +70,9 @@ public class WebhookServiceImpl implements WebhookService {
                     order.setStatus(OrderStatus.PAID);
                     order.setPaidAt(LocalDateTime.now());
                     orderRepository.save(order);
-                    event.setProcessResult("SUCCESS");
-                    log.info("Order marked as PAID: {}", orderId);
+                    Map<String, Object> deliverResult = deliverService.deliverOrderSystem(orderId);
+                    event.setProcessResult("SUCCESS_" + deliverResult.get("status"));
+                    log.info("Order marked as {} via webhook: {}", deliverResult.get("status"), orderId);
                 } else {
                     event.setProcessResult("SKIPPED_" + order.getStatus().name());
                     log.info("Order already {}: {}", order.getStatus(), orderId);
@@ -170,8 +173,9 @@ public class WebhookServiceImpl implements WebhookService {
             order.setStatus(OrderStatus.PAID);
             order.setPaidAt(LocalDateTime.now());
             orderRepository.save(order);
-            event.setProcessResult("SUCCESS");
-            log.info("Epay callback: order {} marked as PAID", orderId);
+            Map<String, Object> deliverResult = deliverService.deliverOrderSystem(orderId);
+            event.setProcessResult("SUCCESS_" + deliverResult.get("status"));
+            log.info("Epay callback: order {} marked as {}", orderId, deliverResult.get("status"));
         } else {
             event.setProcessResult("SKIPPED_" + order.getStatus().name());
             log.info("Epay callback: order {} already {}", orderId, order.getStatus());

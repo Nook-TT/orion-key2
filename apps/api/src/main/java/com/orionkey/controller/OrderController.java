@@ -37,28 +37,40 @@ public class OrderController {
     }
 
     @GetMapping("/{id}/status")
-    public ApiResponse<?> getOrderStatus(@PathVariable UUID id) {
-        return ApiResponse.success(orderService.getOrderStatus(id));
+    public ApiResponse<?> getOrderStatus(@PathVariable UUID id,
+                                         @RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+        return ApiResponse.success(orderService.getOrderStatus(id, RequestContext.getUserId(), sessionToken));
     }
 
     @PostMapping("/{id}/refresh")
-    public ApiResponse<?> refreshOrderStatus(@PathVariable UUID id) {
-        return ApiResponse.success(orderService.refreshOrderStatus(id));
+    public ApiResponse<?> refreshOrderStatus(@PathVariable UUID id,
+                                             @RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+        return ApiResponse.success(orderService.refreshOrderStatus(id, RequestContext.getUserId(), sessionToken));
     }
 
     @PostMapping("/query")
-    public ApiResponse<?> queryOrders(@RequestBody Map<String, Object> request) {
-        return ApiResponse.success(deliverService.queryOrders(request));
+    public ApiResponse<?> queryOrders(@RequestBody Map<String, Object> request,
+                                      @RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+        return ApiResponse.success(deliverService.queryOrders(request, RequestContext.getUserId(), sessionToken));
+    }
+
+    @GetMapping("/{id}/delivery")
+    public ApiResponse<?> getDeliveryResult(@PathVariable UUID id,
+                                            @RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+        return ApiResponse.success(deliverService.getDeliveryResult(id, RequestContext.getUserId(), sessionToken));
     }
 
     @PostMapping("/deliver")
-    public ApiResponse<?> deliverOrders(@RequestBody Map<String, Object> request) {
-        return ApiResponse.success(deliverService.deliverOrders(request));
+    public ApiResponse<?> deliverOrders(@RequestBody Map<String, Object> request,
+                                        @RequestHeader(value = "X-Session-Token", required = false) String sessionToken) {
+        return ApiResponse.success(deliverService.deliverOrders(request, RequestContext.getUserId(), sessionToken));
     }
 
     @GetMapping("/{id}/export")
-    public void exportCardKeys(@PathVariable UUID id, HttpServletResponse response) throws Exception {
-        String content = deliverService.exportCardKeys(id);
+    public void exportCardKeys(@PathVariable UUID id,
+                               @RequestHeader(value = "X-Session-Token", required = false) String sessionToken,
+                               HttpServletResponse response) throws Exception {
+        String content = deliverService.exportCardKeys(id, RequestContext.getUserId(), sessionToken);
         response.setContentType("text/plain; charset=UTF-8");
         response.setHeader("Content-Disposition", "attachment; filename=card-keys-" + id + ".txt");
         response.getWriter().write(content);

@@ -3,6 +3,7 @@ package com.orionkey.service.impl;
 import com.orionkey.constant.CardKeyStatus;
 import com.orionkey.constant.ErrorCode;
 import com.orionkey.constant.OrderStatus;
+import com.orionkey.context.RequestContext;
 import com.orionkey.entity.*;
 import com.orionkey.exception.BusinessException;
 import com.orionkey.repository.*;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -23,6 +25,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class DeliverServiceImpl implements DeliverService {
+
+    private record Allocation(OrderItem item, List<CardKey> keys) {}
 
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
@@ -34,7 +38,7 @@ public class DeliverServiceImpl implements DeliverService {
 
     @Override
     @SuppressWarnings("unchecked")
-    public List<?> queryOrders(Map<String, Object> request) {
+    public List<?> queryOrders(Map<String, Object> request, UUID userId, String sessionToken) {
         Set<UUID> orderIds = new LinkedHashSet<>();
 
         List<String> orderIdStrs = (List<String>) request.get("order_ids");
@@ -53,8 +57,16 @@ public class DeliverServiceImpl implements DeliverService {
         }
 
         List<Order> orders = orderRepository.findByIdIn(new ArrayList<>(orderIds));
+        orders = orders.stream()
+                .filter(o -> canAccessOrder(o, userId, sessionToken))
+                .toList();
+        if (orders.isEmpty()) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_FOUND, "订单不存在");
+        }
         // Sort by createdAt desc
-        orders.sort((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()));
+        orders = orders.stream()
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+                .toList();
 
         return orders.stream().map(o -> {
             Map<String, Object> map = new LinkedHashMap<>();
@@ -70,9 +82,15 @@ public class DeliverServiceImpl implements DeliverService {
     }
 
     @Override
+    public Map<String, Object> getDeliveryResult(UUID orderId, UUID userId, String sessionToken) {
+        Order order = getAccessibleOrderOrThrow(orderId, userId, sessionToken);
+        return buildReadOnlyDeliveryResult(order);
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
     @Transactional
-    public List<?> deliverOrders(Map<String, Object> request) {
+    public List<?> deliverOrders(Map<String, Object> request, UUID userId, String sessionToken) {
         List<String> orderIdStrs = (List<String>) request.get("order_ids");
         if (orderIdStrs == null || orderIdStrs.isEmpty()) {
             throw new BusinessException(ErrorCode.ORDER_NOT_FOUND, "订单不存在");
@@ -81,82 +99,100 @@ public class DeliverServiceImpl implements DeliverService {
         List<Map<String, Object>> results = new ArrayList<>();
         for (String idStr : orderIdStrs) {
             UUID orderId = UUID.fromString(idStr);
-            results.add(deliverSingleOrder(orderId));
+            results.add(deliverSingleOrder(orderId, userId, sessionToken));
         }
         return results;
     }
 
-    private Map<String, Object> deliverSingleOrder(UUID orderId) {
+    @Override
+    @Transactional
+    public Map<String, Object> deliverOrderSystem(UUID orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND, "订单不存在"));
+        return deliverOrder(order);
+    }
 
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("order_id", orderId);
+    private Map<String, Object> deliverSingleOrder(UUID orderId, UUID userId, String sessionToken) {
+        Order order = getAccessibleOrderOrThrow(orderId, userId, sessionToken);
+        return deliverOrder(order);
+    }
 
+    private Map<String, Object> deliverOrder(Order order) {
         switch (order.getStatus()) {
-            case DELIVERED -> {
-                result.put("status", "DELIVERED");
-                result.put("groups", buildCardKeyGroups(orderId));
-            }
             case PAID -> {
-                List<OrderItem> items = orderItemRepository.findByOrderId(orderId);
-                try {
-                    List<CardKey> allAllocated = new ArrayList<>();
-                    for (OrderItem item : items) {
-                        List<CardKey> keys = cardKeyRepository.findAndLockAvailable(
-                                item.getProductId(), item.getSpecId(), item.getQuantity());
-                        if (keys.size() < item.getQuantity()) {
-                            throw new BusinessException(ErrorCode.ORDER_OUT_OF_STOCK, "缺货补货中，请联系客服");
-                        }
-                        for (CardKey key : keys) {
-                            key.setStatus(CardKeyStatus.SOLD);
-                            key.setOrderId(orderId);
-                            key.setOrderItemId(item.getId());
-                            key.setSoldAt(LocalDateTime.now());
-                            cardKeyRepository.save(key);
-                        }
-                        allAllocated.addAll(keys);
-                    }
-
-                    order.setStatus(OrderStatus.DELIVERED);
-                    order.setDeliveredAt(LocalDateTime.now());
-                    orderRepository.save(order);
-
-                    // Award points
-                    awardPoints(order);
-
-                    // Send delivery email after transaction commits (async, non-blocking)
-                    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                        @Override
-                        public void afterCommit() {
-                            emailService.sendDeliveryEmail(orderId);
-                        }
-                    });
-
-                    result.put("status", "DELIVERED");
-                    result.put("groups", buildCardKeyGroups(orderId));
-                } catch (BusinessException e) {
-                    result.put("status", "PAID");
-                    result.put("groups", List.of());
-                    log.warn("Deliver failed for order {}: {}", orderId, e.getMessage());
-                }
+                return deliverPaidOrder(order);
             }
-            case PENDING -> {
-                result.put("status", "PENDING");
-                result.put("groups", List.of());
-            }
-            case EXPIRED -> {
-                result.put("status", "EXPIRED");
-                result.put("groups", List.of());
+            case DELIVERED, PENDING, EXPIRED -> {
+                return buildReadOnlyDeliveryResult(order);
             }
         }
+        return buildReadOnlyDeliveryResult(order);
+    }
+
+    private Map<String, Object> deliverPaidOrder(Order order) {
+        UUID orderId = order.getId();
+        List<OrderItem> items = orderItemRepository.findByOrderId(orderId);
+        try {
+            List<Allocation> allocations = new ArrayList<>();
+            for (OrderItem item : items) {
+                List<CardKey> keys = cardKeyRepository.findAndLockAvailable(
+                        item.getProductId(), item.getSpecId(), item.getQuantity());
+                if (keys.size() < item.getQuantity()) {
+                    throw new BusinessException(ErrorCode.ORDER_OUT_OF_STOCK, "缺货补货中，请联系客服");
+                }
+                allocations.add(new Allocation(item, keys));
+            }
+
+            for (Allocation allocation : allocations) {
+                for (CardKey key : allocation.keys()) {
+                    key.setStatus(CardKeyStatus.SOLD);
+                    key.setOrderId(orderId);
+                    key.setOrderItemId(allocation.item().getId());
+                    key.setSoldAt(LocalDateTime.now());
+                    cardKeyRepository.save(key);
+                }
+            }
+
+            order.setStatus(OrderStatus.DELIVERED);
+            order.setDeliveredAt(LocalDateTime.now());
+            orderRepository.save(order);
+
+            // Award points
+            awardPoints(order);
+
+            // Send delivery email after transaction commits (async, non-blocking)
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    emailService.sendDeliveryEmail(orderId);
+                }
+            });
+
+            return buildReadOnlyDeliveryResult(order);
+        } catch (BusinessException e) {
+            log.warn("Deliver failed for order {}: {}", orderId, e.getMessage());
+            return buildReadOnlyDeliveryResult(order);
+        }
+    }
+
+    private Map<String, Object> buildReadOnlyDeliveryResult(Order order) {
+        List<Map<String, Object>> groups = order.getStatus() == OrderStatus.DELIVERED
+                ? buildCardKeyGroups(order.getId())
+                : List.of();
+        return buildDeliveryResult(order, groups);
+    }
+
+    private Map<String, Object> buildDeliveryResult(Order order, List<Map<String, Object>> groups) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("order_id", order.getId());
+        result.put("status", order.getStatus().name());
+        result.put("groups", groups);
         return result;
     }
 
     @Override
-    public String exportCardKeys(UUID orderId) {
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND, "订单不存在"));
+    public String exportCardKeys(UUID orderId, UUID userId, String sessionToken) {
+        Order order = getAccessibleOrderOrThrow(orderId, userId, sessionToken);
         if (order.getStatus() != OrderStatus.DELIVERED) {
             throw new BusinessException(ErrorCode.ORDER_NOT_PAID, "订单未发货");
         }
@@ -186,6 +222,15 @@ public class DeliverServiceImpl implements DeliverService {
             }
         }
         return sb.toString();
+    }
+
+    private Order getAccessibleOrderOrThrow(UUID orderId, UUID userId, String sessionToken) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND, "订单不存在"));
+        if (!canAccessOrder(order, userId, sessionToken)) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_FOUND, "订单不存在");
+        }
+        return order;
     }
 
     private List<Map<String, Object>> buildCardKeyGroups(UUID orderId) {
@@ -240,5 +285,15 @@ public class DeliverServiceImpl implements DeliverService {
         log.setReason("购物奖励积分");
         log.setOrderId(order.getId());
         pointsLogRepository.save(log);
+    }
+
+    private boolean canAccessOrder(Order order, UUID userId, String sessionToken) {
+        if ("ADMIN".equals(RequestContext.getRole())) {
+            return true;
+        }
+        if (userId != null && userId.equals(order.getUserId())) {
+            return true;
+        }
+        return StringUtils.hasText(sessionToken) && sessionToken.equals(order.getSessionToken());
     }
 }

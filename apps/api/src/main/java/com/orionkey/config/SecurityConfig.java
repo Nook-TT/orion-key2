@@ -44,8 +44,9 @@ public class SecurityConfig {
                         // Public endpoints
                         .requestMatchers("/auth/captcha", "/auth/register", "/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/products/**", "/categories", "/site/config", "/payment-channels", "/currencies").permitAll()
-                        .requestMatchers("/orders/query", "/orders/deliver").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/orders/*/status", "/orders/*/export").permitAll()
+                        // Guest order lookup endpoints - ownership is verified in the service layer
+                        .requestMatchers("/orders/query").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/orders/*/status", "/orders/*/delivery").permitAll()
                         .requestMatchers(HttpMethod.POST, "/orders").permitAll()
                         .requestMatchers(HttpMethod.POST, "/orders/from-cart").permitAll()
                         .requestMatchers(HttpMethod.POST, "/orders/*/refresh").permitAll()
@@ -56,7 +57,9 @@ public class SecurityConfig {
                         // Authenticated user endpoints
                         .requestMatchers("/auth/logout").authenticated()
                         .requestMatchers("/user/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/orders/*/export").authenticated()
                         // Admin endpoints
+                        .requestMatchers(HttpMethod.POST, "/orders/deliver").hasRole("ADMIN")
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .requestMatchers("/upload/**").hasRole("ADMIN")
                         // Default

@@ -12,6 +12,8 @@ import com.orionkey.repository.OrderItemRepository;
 import com.orionkey.repository.OrderRepository;
 import com.orionkey.repository.UserRepository;
 import com.orionkey.service.AdminOrderService;
+import com.orionkey.service.DeliverService;
+import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -21,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.*;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AdminOrderServiceImpl implements AdminOrderService {
@@ -28,6 +31,7 @@ public class AdminOrderServiceImpl implements AdminOrderService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final UserRepository userRepository;
+    private final DeliverService deliverService;
 
     @Override
     public PageResult<?> listOrders(String status, String orderType, String paymentMethod,
@@ -70,6 +74,8 @@ public class AdminOrderServiceImpl implements AdminOrderService {
         order.setStatus(OrderStatus.PAID);
         order.setPaidAt(LocalDateTime.now());
         orderRepository.save(order);
+        Map<String, Object> deliverResult = deliverService.deliverOrderSystem(id);
+        log.info("Admin markPaid auto-delivery result for order {}: {}", id, deliverResult.get("status"));
     }
 
     private Map<String, Object> toAdminOrder(Order o) {

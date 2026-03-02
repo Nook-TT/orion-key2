@@ -22,6 +22,32 @@
 
 ---
 
+## Public Release Notes
+
+This repository is a self-hosted delivery platform template intended for deployment on your own server.
+
+- No real production secrets are included; copy `.env.example` and fill in your own values before deployment
+- No default admin account is seeded; create the first admin manually after installation
+- Every deployment should use a fresh database password, JWT secret, payment config, and domain
+- Suitable as a base template for self-hosting, private forks, and secondary development
+
+---
+
+## Quick Start
+
+1. Copy the environment template:
+   `cp .env.example .env`
+2. Edit `.env` and replace the database, JWT, domain, mail, and other placeholders with your own values
+3. Choose one startup mode:
+   Source build: `docker compose up -d --build`
+   Image deploy: `docker compose -f docker-compose.prod.yml up -d`
+4. Configure your own reverse proxy, domain, and SSL outside this repository
+5. After first boot, create the first admin account manually, then configure payment channels and site settings
+
+Read [UPGRADE.md](UPGRADE.md) before upgrading an existing deployment.
+
+---
+
 ## Screenshots
 
 <details open>
@@ -145,7 +171,7 @@ spring:
     password: ${DB_PASSWORD:your_password}
 ```
 
-Tables are auto-created on first startup (`ddl-auto: update`). After startup, run the seed SQL once to insert admin account, site config, and payment channels:
+Tables are auto-created on first startup (`ddl-auto: update`). After startup, run the seed SQL once to insert site config and demo data (it no longer creates a default admin account):
 
 ```bash
 psql -U orionkey -d orion_key -f apps/api/src/main/resources/data.sql
@@ -237,7 +263,7 @@ pnpm dev:web
 ### Verify
 
 - Health check: `GET http://localhost:8083/api/categories`
-- Admin login: `admin` / `admin123`
+- No default admin account is seeded; create one manually after deployment
 
 ---
 

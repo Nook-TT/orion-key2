@@ -4,6 +4,7 @@ import com.orionkey.constant.CardKeyStatus;
 import com.orionkey.constant.ErrorCode;
 import com.orionkey.constant.OrderStatus;
 import com.orionkey.constant.OrderType;
+import com.orionkey.context.RequestContext;
 import com.orionkey.entity.*;
 import com.orionkey.exception.BusinessException;
 import com.orionkey.repository.*;
@@ -14,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -199,9 +201,8 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public Map<String, Object> getOrderStatus(UUID orderId) {
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND, "订单不存在"));
+    public Map<String, Object> getOrderStatus(UUID orderId, UUID userId, String sessionToken) {
+        Order order = getAccessibleOrderOrThrow(orderId, userId, sessionToken);
         // Auto expire check
         if (order.getStatus() == OrderStatus.PENDING && order.getExpiresAt().isBefore(LocalDateTime.now())) {
             order.setStatus(OrderStatus.EXPIRED);
@@ -225,9 +226,9 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    public Map<String, Object> refreshOrderStatus(UUID orderId) {
+    public Map<String, Object> refreshOrderStatus(UUID orderId, UUID userId, String sessionToken) {
         // In a real implementation, this would query the payment provider
-        return getOrderStatus(orderId);
+        return getOrderStatus(orderId, userId, sessionToken);
     }
 
     @Override
@@ -331,5 +332,24 @@ public class OrderServiceImpl implements OrderService {
                     try { return Integer.parseInt(c.getConfigValue()); }
                     catch (Exception e) { return defaultValue; }
                 }).orElse(defaultValue);
+    }
+
+    private Order getAccessibleOrderOrThrow(UUID orderId, UUID userId, String sessionToken) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND, "订单不存在"));
+        if (!canAccessOrder(order, userId, sessionToken)) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_FOUND, "订单不存在");
+        }
+        return order;
+    }
+
+    private boolean canAccessOrder(Order order, UUID userId, String sessionToken) {
+        if ("ADMIN".equals(RequestContext.getRole())) {
+            return true;
+        }
+        if (userId != null && userId.equals(order.getUserId())) {
+            return true;
+        }
+        return StringUtils.hasText(sessionToken) && sessionToken.equals(order.getSessionToken());
     }
 }

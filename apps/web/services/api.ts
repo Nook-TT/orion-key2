@@ -40,6 +40,9 @@ import type {
 // ============================================================
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "/api"
+const MOCK_FALLBACK_ENABLED =
+  process.env.NEXT_PUBLIC_ENABLE_MOCK_FALLBACK === "true" ||
+  process.env.NODE_ENV !== "production"
 
 // ============================================================
 // Error
@@ -223,6 +226,9 @@ export async function withMockFallback<T>(
     if (err instanceof ApiError) {
       throw err // business error — let UI handle it
     }
+    if (!MOCK_FALLBACK_ENABLED) {
+      throw err
+    }
     // Network error (TypeError) or unexpected — fallback to mock
     console.warn("[API] Network error, falling back to mock data:", err)
     return mockFn()
@@ -309,6 +315,8 @@ export const orderApi = {
     request<{ status: OrderStatus }>(`/orders/${orderId}/refresh`, { method: "POST" }),
   query: (data: { order_ids?: string[]; emails?: string[] }) =>
     request<OrderBrief[]>("/orders/query", { method: "POST", body: JSON.stringify(data) }),
+  getDelivery: (orderId: string) =>
+    request<DeliverResult>(`/orders/${orderId}/delivery`),
   deliver: (data: { order_ids: string[] }) =>
     request<DeliverResult[]>("/orders/deliver", { method: "POST", body: JSON.stringify(data) }),
   exportKeys: (orderId: string) =>

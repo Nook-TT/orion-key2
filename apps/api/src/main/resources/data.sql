@@ -5,15 +5,10 @@
 -- ============================================================
 
 -- ────────────────────────────────────────
--- 1. 管理员账户 (密码: admin123，请首次登录后立即修改)
---    默认使用 BCrypt 哈希。若 application.yml 设置了 security.password-plain: true，
---    则需将下方 password_hash 改为明文 'admin123'
+-- 1. 管理员账户
+--    出于安全原因，此初始化脚本不再写入任何默认管理员账户。
+--    生产环境请通过受控 SQL 手动创建管理员，并使用 BCrypt 哈希密码。
 -- ────────────────────────────────────────
-INSERT INTO users (id, username, email, password_hash, role, points, is_deleted, created_at, updated_at)
-SELECT gen_random_uuid(), 'admin', 'admin@orionkey.com',
-       '123456',
-       'ADMIN', 0, 0, NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = 'admin');
 
 -- ────────────────────────────────────────
 -- 2. 站点配置 (config_group = 'site')
