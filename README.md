@@ -44,6 +44,8 @@ Automated Digital Goods Delivery Platform
 4. 配置你自己的反向代理、域名和 SSL（不要直接复用仓库外的服务器配置）
 5. 首次部署后手动创建管理员账号，再进入后台配置支付渠道和站点参数
 
+详细部署请阅读 [DEPLOYMENT.md](DEPLOYMENT.md)。
+
 升级现有实例前，请先阅读 [UPGRADE.md](UPGRADE.md)。
 
 ---
