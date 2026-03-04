@@ -236,8 +236,8 @@ export default function AdminRiskPage() {
                 ) : (
                   flaggedOrders.map((order) => (
                     <tr key={order.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-3 font-mono text-xs text-foreground">
-                        {order.id.length > 16 ? `${order.id.slice(0, 8)}...${order.id.slice(-4)}` : order.id}
+                      <td className="px-4 py-3 font-mono text-xs text-foreground break-all">
+                        {order.id}
                       </td>
                       <td className="px-4 py-3 text-foreground">{order.username || t("admin.guest")}</td>
                       <td className="px-4 py-3 text-muted-foreground">{order.email}</td>

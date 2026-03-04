@@ -1,17 +1,19 @@
 import { getProducts, getCategories, getSiteConfig } from "@/services/api-server"
 import { HomeContent } from "./home-content"
+import { stripHtmlTags } from "@/lib/html"
 import type { Metadata } from "next"
 
 export async function generateMetadata(): Promise<Metadata> {
   try {
     const config = await getSiteConfig()
+    const plainDescription = stripHtmlTags(config.site_description || config.site_slogan || "")
     return {
       title: config.site_name || "Orion Key",
-      description: config.site_description || config.site_slogan || "",
+      description: plainDescription,
       alternates: { canonical: "/" },
       openGraph: {
         title: config.site_name || "Orion Key",
-        description: config.site_description || config.site_slogan || "",
+        description: plainDescription,
         url: "/",
         ...(config.logo_url ? { images: [{ url: config.logo_url }] } : {}),
       },
@@ -32,7 +34,7 @@ export default async function HomePage() {
     "@context": "https://schema.org",
     "@type": "WebSite",
     name: config?.site_name || "Orion Key",
-    description: config?.site_description || config?.site_slogan || "",
+    description: stripHtmlTags(config?.site_description || config?.site_slogan || ""),
   }
 
   return (

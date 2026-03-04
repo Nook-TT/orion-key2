@@ -95,6 +95,12 @@ public class AdminCardKeyController {
         return ApiResponse.success(Map.of("unlocked_count", count));
     }
 
+    @PostMapping("/delete-selected")
+    public ApiResponse<?> deleteSelectedCardKeys(@RequestBody Map<String, Object> request) {
+        int count = adminCardKeyService.deleteSelectedCardKeys(parseCardKeyIds(request));
+        return ApiResponse.success(Map.of("deleted_count", count));
+    }
+
     @PostMapping("/{id}/invalidate")
     public ApiResponse<Void> invalidateCardKey(@PathVariable UUID id) {
         adminCardKeyService.invalidateCardKey(id);

@@ -53,6 +53,7 @@ export default function AdminProductsPage() {
     title: "",
     description: "",
     detail_md: "",
+    delivery_note: "",
     category_id: "",
     base_price: "",
     currency: "CNY",
@@ -144,6 +145,7 @@ export default function AdminProductsPage() {
       title: product.title,
       description: product.description || "",
       detail_md: product.detail_md || "",
+      delivery_note: product.delivery_note || "",
       category_id: product.category_id,
       base_price: String(product.base_price),
       currency: product.currency || "CNY",
@@ -218,6 +220,7 @@ export default function AdminProductsPage() {
         title: formData.title,
         description: formData.description || undefined,
         detail_md: formData.detail_md || undefined,
+        delivery_note: formData.delivery_note || undefined,
         category_id: formData.category_id,
         base_price: basePrice,
         currency: formData.currency,
@@ -290,7 +293,7 @@ export default function AdminProductsPage() {
   const handleCloseModal = () => {
     setShowModal(false)
     setEditingProduct(null)
-    setFormData({ title: "", description: "", detail_md: "", category_id: "", base_price: "", currency: "CNY", cover_url: "", low_stock_threshold: "10", wholesale_enabled: false, is_enabled: true, initial_sales: "", sort_order: "", delivery_type: "AUTO" })
+    setFormData({ title: "", description: "", detail_md: "", delivery_note: "", category_id: "", base_price: "", currency: "CNY", cover_url: "", low_stock_threshold: "10", wholesale_enabled: false, is_enabled: true, initial_sales: "", sort_order: "", delivery_type: "AUTO" })
     setFormSpecs([])
     setSpecsEnabled(false)
   }
@@ -623,6 +626,17 @@ export default function AdminProductsPage() {
                     手动发货
                   </button>
                 </div>
+              </div>
+              {/* 发货附言 */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-foreground">发货附言</label>
+                <textarea
+                  className="min-h-24 rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="可填写使用提醒、售后说明、注意事项等。发货后会显示在查单页、下载文本和邮件中，支持换行。"
+                  value={formData.delivery_note}
+                  onChange={(e) => setFormData({ ...formData, delivery_note: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">建议写简短明确的说明，例如使用限制、登录提醒、售后联系说明等。</p>
               </div>
               {/* 商品规格 */}
               <div className="flex flex-col gap-3">

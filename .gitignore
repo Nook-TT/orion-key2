@@ -26,6 +26,7 @@ replay_pid*
 # Local secrets and runtime data
 .env
 uploads/
+uploads-backup-*/
 
 # Node / Next.js
 node_modules/

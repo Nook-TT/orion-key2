@@ -39,6 +39,7 @@ export default function PaymentPage({ params }: { params: Promise<{ orderId: str
   const [refreshCooldown, setRefreshCooldown] = useState(0)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [qrcodeUrl, setQrcodeUrl] = useState<string>("")
+  const [actualAmount, setActualAmount] = useState<number | null>(null)
 
   const paymentMethod = searchParams.get("method") || "alipay"
   const paymentMethodName = getPaymentLabel(paymentMethod, t)
@@ -56,6 +57,7 @@ export default function PaymentPage({ params }: { params: Promise<{ orderId: str
     async function fetchOrderInfo() {
       try {
         const result = await orderApi.getStatus(orderId)
+        setActualAmount(result.actual_amount)
         if (result.remaining_seconds !== undefined) {
           setTimeLeft(result.remaining_seconds)
         }
@@ -94,9 +96,10 @@ export default function PaymentPage({ params }: { params: Promise<{ orderId: str
       try {
         const result = await withMockFallback(
           () => orderApi.getStatus(orderId),
-          () => ({ order_id: orderId, status: "PENDING" as const, expires_at: "", remaining_seconds: 0 })
+          () => ({ order_id: orderId, actual_amount: 0, status: "PENDING" as const, expires_at: "", remaining_seconds: 0 })
         )
         // 同步服务端倒计时，防止客户端时间漂移
+        setActualAmount(result.actual_amount)
         if (result.remaining_seconds !== undefined) {
           setTimeLeft(result.remaining_seconds)
         }
@@ -128,8 +131,9 @@ export default function PaymentPage({ params }: { params: Promise<{ orderId: str
     try {
       const result = await withMockFallback(
         () => orderApi.getStatus(orderId),
-        () => ({ order_id: orderId, status: "PENDING" as const, expires_at: "", remaining_seconds: 0 })
+        () => ({ order_id: orderId, actual_amount: 0, status: "PENDING" as const, expires_at: "", remaining_seconds: 0 })
       )
+      setActualAmount(result.actual_amount)
       if (result.status !== "PENDING") {
         setStatus(result.status)
         if (result.status === "PAID" || result.status === "DELIVERED") {
@@ -247,6 +251,17 @@ export default function PaymentPage({ params }: { params: Promise<{ orderId: str
           </span>
         </div>
 
+        {actualAmount !== null && (
+          <div className="flex w-full max-w-sm flex-col items-center rounded-2xl border border-primary/15 bg-primary/5 px-6 py-4 text-center shadow-sm">
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              应付金额
+            </span>
+            <span className="mt-2 text-4xl font-black leading-none text-primary sm:text-5xl">
+              ¥{actualAmount.toFixed(2)}
+            </span>
+          </div>
+        )}
+
         {/* 品牌色背景卡片 */}
         <div
           className="flex w-72 flex-col items-center gap-4 rounded-2xl px-6 pb-8 pt-6"
@@ -289,15 +304,15 @@ export default function PaymentPage({ params }: { params: Promise<{ orderId: str
         </p>
 
         {/* 订单号 */}
-        <div className="flex w-full items-center justify-between border-t border-border pt-4 text-sm">
+        <div className="flex w-full items-start justify-between gap-3 border-t border-border pt-4 text-sm">
           <span className="text-muted-foreground">{t("payment.orderNo")}</span>
-          <span className="flex items-center gap-1 font-mono text-xs text-foreground">
+          <span className="flex min-w-0 items-start gap-1 font-mono text-xs text-foreground">
             <span
-              className="cursor-pointer underline-offset-4 transition-all hover:underline hover:text-primary"
+              className="min-w-0 break-all text-right cursor-pointer underline-offset-4 transition-all hover:underline hover:text-primary"
               title={orderId}
               onClick={() => copyToClipboard(orderId)}
             >
-              {orderId.length > 20 ? `${orderId.slice(0, 8)}...${orderId.slice(-8)}` : orderId}
+              {orderId}
             </span>
             <button
               type="button"

@@ -216,6 +216,14 @@ mail:
   site-url: ${MAIL_SITE_URL:https://your-domain.com}
 ```
 
+配置好 SMTP 后，系统会在订单自动发货完成时向用户下单时填写的邮箱发送卡密内容。
+
+如果你使用 Gmail：
+- 推荐 `MAIL_HOST=smtp.gmail.com`
+- 推荐 `MAIL_PORT=465`
+- `MAIL_PASSWORD` 请填写 Google 的 16 位应用专用密码，不要填写登录密码
+- Google 应用专用密码入口：`https://myaccount.google.com/apppasswords`
+
 ### 文件上传
 
 ```yaml
@@ -291,9 +299,10 @@ PASSWORD_PLAIN=false
 
 # 邮件（不需要可设 MAIL_ENABLED=false）
 MAIL_ENABLED=true
-MAIL_HOST=smtp.example.com
-MAIL_USERNAME=your@email.com
-MAIL_PASSWORD=your_password
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=465
+MAIL_USERNAME=your@gmail.com
+MAIL_PASSWORD=your_16_char_app_password
 
 # 镜像地址（CI/CD 自动构建推送，或手动指定）
 API_IMAGE=ghcr.io/your-org/orion-key-api:latest

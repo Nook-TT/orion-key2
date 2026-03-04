@@ -160,6 +160,10 @@ export default function OrderQueryPage() {
     const lines: string[] = []
     deliver.groups.forEach(g => {
       lines.push(`--- ${g.product_title}${g.spec_name ? ` (${g.spec_name})` : ""} ---`)
+      if (g.delivery_note?.trim()) {
+        lines.push("发货附言:")
+        g.delivery_note.split(/\r?\n/).forEach(line => lines.push(line))
+      }
       g.card_keys.forEach(k => lines.push(k))
       lines.push("")
     })
@@ -234,14 +238,15 @@ export default function OrderQueryPage() {
 
       {orders.map((order) => {
         const deliver = getDeliverForOrder(order.id)
+        const hasAnyCardKeys = deliver?.groups.some(group => group.card_keys.length > 0) ?? false
         return (
           <div key={order.id} className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5">
             {/* Order Header */}
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">{t("payment.orderNo")}</p>
-                <p className="font-mono text-xs font-medium text-foreground">
-                  {order.id.length > 30 ? `${order.id.slice(0, 12)}...${order.id.slice(-8)}` : order.id}
+                <p className="font-mono text-xs font-medium text-foreground break-all">
+                  {order.id}
                 </p>
               </div>
               <OrderStatusBadge status={order.status} />
@@ -275,47 +280,66 @@ export default function OrderQueryPage() {
                       <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                       {t("order.cardKeys")}
                     </h3>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => copyAllKeys(deliver)}
-                        className="inline-flex h-7 items-center gap-1 rounded border border-border px-2 text-xs text-foreground transition-colors hover:bg-accent"
-                      >
-                        <Copy className="h-3 w-3" />
-                        {t("order.copyAll")}
-                      </button>
-                      <button
-                        onClick={() => downloadKeys(deliver)}
-                        className="inline-flex h-7 items-center gap-1 rounded border border-border px-2 text-xs text-foreground transition-colors hover:bg-accent"
-                      >
-                        <Download className="h-3 w-3" />
-                        {t("order.download")}
-                      </button>
-                    </div>
+                    {hasAnyCardKeys && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => copyAllKeys(deliver)}
+                          className="inline-flex h-7 items-center gap-1 rounded border border-border px-2 text-xs text-foreground transition-colors hover:bg-accent"
+                        >
+                          <Copy className="h-3 w-3" />
+                          {t("order.copyAll")}
+                        </button>
+                        <button
+                          onClick={() => downloadKeys(deliver)}
+                          className="inline-flex h-7 items-center gap-1 rounded border border-border px-2 text-xs text-foreground transition-colors hover:bg-accent"
+                        >
+                          <Download className="h-3 w-3" />
+                          {t("order.download")}
+                        </button>
+                      </div>
+                    )}
                   </div>
                   {deliver.groups.map((group, gIdx) => (
                     <div key={gIdx} className="mb-2">
                       <p className="mb-1 text-xs font-medium text-muted-foreground">
                         {group.product_title}{group.spec_name ? ` - ${group.spec_name}` : ""}
                       </p>
-                      <div className="rounded-md bg-muted p-3">
-                        {group.card_keys.map((key, kIdx) => (
-                          <div
-                            key={kIdx}
-                            className="flex items-center justify-between py-1"
-                          >
-                            <code className="font-mono text-sm text-foreground">{key}</code>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(key)
-                                toast.success(t("order.copied"))
-                              }}
-                              className="text-muted-foreground hover:text-foreground"
+                      {group.card_keys.length > 0 && (
+                        <div className="rounded-md bg-muted p-3">
+                          {group.card_keys.map((key, kIdx) => (
+                            <div
+                              key={kIdx}
+                              className="flex items-center justify-between py-1"
                             >
-                              <Copy className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
+                              <code className="font-mono text-sm text-foreground">{key}</code>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(key)
+                                  toast.success(t("order.copied"))
+                                }}
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {group.delivery_note?.trim() && (
+                        <div
+                          className={cn(
+                            "rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900",
+                            group.card_keys.length > 0 && "mt-2"
+                          )}
+                        >
+                          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-700">
+                            发货附言
+                          </p>
+                          <p className="whitespace-pre-line break-words leading-6">
+                            {group.delivery_note}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -345,8 +369,8 @@ export default function OrderQueryPage() {
                 >
                   <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <div className="flex-1 min-w-0">
-                    <p className="font-mono text-sm font-medium text-foreground truncate">
-                      {recent.value.length > 30 ? `${recent.value.slice(0, 12)}...${recent.value.slice(-8)}` : recent.value}
+                    <p className="font-mono text-sm font-medium text-foreground break-all">
+                      {recent.value}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {formatTimeAgo(recent.timestamp)}

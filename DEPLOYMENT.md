@@ -102,6 +102,21 @@ NEXT_PUBLIC_ENABLE_MOCK_FALLBACK=false
 # 邮件（可选）
 MAIL_ENABLED=false
 MAIL_SITE_URL=https://your-domain.com
+MAIL_HOST=smtp.example.com
+MAIL_PORT=465
+MAIL_USERNAME=your@email.com
+MAIL_PASSWORD=your_password
+```
+
+如果你要启用“发货后自动发邮件”，把邮件配置补完整即可。推荐 Gmail 示例：
+
+```env
+MAIL_ENABLED=true
+MAIL_SITE_URL=https://your-domain.com
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=465
+MAIL_USERNAME=your@gmail.com
+MAIL_PASSWORD=你的16位应用专用密码
 ```
 
 生成 JWT 密钥：
@@ -114,6 +129,29 @@ openssl rand -base64 48
 - 不要提交 `.env`
 - 不要复用示例密码
 - 不要把任何支付商户密钥写进公开仓库
+
+### 邮件发件（Gmail 示例）
+
+这个项目已经内置邮件发件能力。配置好 SMTP 后，订单在自动发货完成时会把卡密内容发到用户下单时填写的邮箱。
+
+如果你使用 Gmail：
+
+1. 先开启 Google 账号两步验证（2-Step Verification）
+2. 打开 Google 应用专用密码页面：
+
+```text
+https://myaccount.google.com/apppasswords
+```
+
+3. 创建一个新的应用专用密码（App Password）
+4. Google 会给你一组 16 位密码
+5. 把这组 16 位密码填到 `.env` 的 `MAIL_PASSWORD`
+
+注意：
+- `MAIL_PASSWORD` 不能填你的 Gmail 登录密码
+- 这类传统 SMTP 登录应使用 16 位应用专用密码
+- 建议保持 `MAIL_PORT=465`，因为项目默认走 SSL SMTP
+- 如果你后续重置或撤销了应用专用密码，需要同步更新 `.env`
 
 ## 四、方式 A：源码构建部署（推荐）
 

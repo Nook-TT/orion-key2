@@ -5,6 +5,8 @@ import {
   Upload,
   Eye,
   Ban,
+  Copy,
+  Trash2,
   Lock,
   Unlock,
   Package,
@@ -26,7 +28,7 @@ import {
   mockProducts,
 } from "@/lib/mock-data"
 import { Modal } from "@/components/ui/modal"
-import type { CardKeyStockSummary, CardKeyListItem, CardImportBatch, ProductCard, ProductSpec } from "@/types"
+import type { CardKeyStockSummary, CardKeyListItem, CardImportBatch, CardImportResult, ProductCard, ProductSpec } from "@/types"
 
 export default function AdminCardKeysPage() {
   const { t } = useLocale()
@@ -58,6 +60,18 @@ export default function AdminCardKeysPage() {
   const [selectedAction, setSelectedAction] = useState<{ type: "lock" | "unlock"; count: number } | null>(null)
   const [selectedActionNote, setSelectedActionNote] = useState("")
   const [selectedActionProcessing, setSelectedActionProcessing] = useState(false)
+  const [selectedDeleteProcessing, setSelectedDeleteProcessing] = useState(false)
+  const [showQuickAddModal, setShowQuickAddModal] = useState(false)
+  const [quickAddContent, setQuickAddContent] = useState("")
+  const [quickAdding, setQuickAdding] = useState(false)
+  const [pendingDuplicateDecision, setPendingDuplicateDecision] = useState<{
+    mode: "import" | "quick-add"
+    productId: string
+    specId: string | null
+    content: string
+    preview: CardImportResult
+  } | null>(null)
+  const [duplicateDecisionLoading, setDuplicateDecisionLoading] = useState<"skip" | "overwrite" | null>(null)
 
   // Import form state
   const [importProductId, setImportProductId] = useState("")
@@ -66,6 +80,123 @@ export default function AdminCardKeysPage() {
   const [importing, setImporting] = useState(false)
   const [importSpecs, setImportSpecs] = useState<ProductSpec[]>([])
   const [loadingSpecs, setLoadingSpecs] = useState(false)
+
+  const countImportLines = (value: string) =>
+    value
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean).length
+
+  const buildMockImportResult = (value: string): CardImportResult => {
+    const lineCount = countImportLines(value)
+    return {
+      total_count: lineCount,
+      success_count: lineCount,
+      fail_count: 0,
+      fail_detail: null,
+      overwrite_count: 0,
+      skipped_duplicate_count: 0,
+      input_duplicate_count: 0,
+    }
+  }
+
+  const finishImportSuccess = async (mode: "import" | "quick-add", result: CardImportResult) => {
+    const overwriteCount = result.overwrite_count ?? 0
+    const createdCount = Math.max(0, result.success_count - overwriteCount)
+    const summary: string[] = []
+    if (createdCount > 0) {
+      summary.push(`新增 ${createdCount} 条卡密`)
+    }
+    if (overwriteCount > 0) {
+      summary.push(`覆盖 ${overwriteCount} 条重复项`)
+    }
+    if (summary.length === 0) {
+      summary.push("已处理卡密")
+    }
+    if ((result.skipped_duplicate_count ?? 0) > 0) {
+      summary.push(`跳过 ${result.skipped_duplicate_count} 条重复项`)
+    }
+    if ((result.input_duplicate_count ?? 0) > 0) {
+      summary.push(`忽略 ${result.input_duplicate_count} 条本次输入重复`)
+    }
+    if (result.fail_count > 0 && (result.skipped_duplicate_count ?? 0) === 0 && (result.input_duplicate_count ?? 0) === 0) {
+      summary.push(`失败 ${result.fail_count} 条`)
+    }
+    toast.success(summary.join("，"))
+
+    setPendingDuplicateDecision(null)
+
+    if (mode === "import") {
+      setShowImportModal(false)
+      setImportContent("")
+      setImportProductId("")
+      setImportSpecId("")
+      setImportSpecs([])
+      await Promise.all([fetchStock(), fetchImportBatches()])
+      return
+    }
+
+    setShowQuickAddModal(false)
+    setQuickAddContent("")
+    setDetailPage(1)
+    await fetchStock()
+    if (detailItem) {
+      await fetchDetailKeys(detailItem, 1)
+    }
+  }
+
+  const submitCardImport = async (params: {
+    mode: "import" | "quick-add"
+    productId: string
+    specId: string | null
+    content: string
+    duplicateAction?: "ask" | "skip" | "overwrite"
+  }) => {
+    const result = await withMockFallback(
+      () => adminCardKeyApi.import({
+        product_id: params.productId,
+        spec_id: params.specId,
+        content: params.content,
+        duplicate_action: params.duplicateAction,
+      }),
+      () => buildMockImportResult(params.content)
+    )
+
+    if (result.requires_duplicate_action) {
+      setPendingDuplicateDecision({
+        mode: params.mode,
+        productId: params.productId,
+        specId: params.specId,
+        content: params.content,
+        preview: result,
+      })
+      toast.error("检测到重复卡密，请选择覆盖或跳过")
+      return
+    }
+
+    await finishImportSuccess(params.mode, result)
+  }
+
+  const handleResolveDuplicateImport = async (action: "skip" | "overwrite") => {
+    if (!pendingDuplicateDecision) {
+      return
+    }
+
+    setDuplicateDecisionLoading(action)
+    try {
+      await submitCardImport({
+        mode: pendingDuplicateDecision.mode,
+        productId: pendingDuplicateDecision.productId,
+        specId: pendingDuplicateDecision.specId,
+        content: pendingDuplicateDecision.content,
+        duplicateAction: action,
+      })
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "处理重复卡密失败")
+    } finally {
+      setDuplicateDecisionLoading(null)
+    }
+  }
 
   const fetchStock = async () => {
     try {
@@ -120,12 +251,19 @@ export default function AdminCardKeysPage() {
   const totalSold = stockList.reduce((s, r) => s + r.sold, 0)
   const totalLocked = stockList.reduce((s, r) => s + r.locked, 0)
   const totalInvalid = stockList.reduce((s, r) => s + r.invalid, 0)
-  const selectableDetailKeys = detailKeys.filter((key) => key.status === "AVAILABLE" || key.status === "LOCKED")
+  const selectableDetailKeys = detailKeys
+  const selectedDetailKeys = detailKeys.filter((key) => selectedDetailKeyIds.includes(key.id))
   const selectedAvailableKeys = detailKeys.filter(
     (key) => selectedDetailKeyIds.includes(key.id) && key.status === "AVAILABLE"
   )
   const selectedLockedKeys = detailKeys.filter(
     (key) => selectedDetailKeyIds.includes(key.id) && key.status === "LOCKED"
+  )
+  const selectedSoldKeys = detailKeys.filter(
+    (key) => selectedDetailKeyIds.includes(key.id) && key.status === "SOLD"
+  )
+  const selectedDeletableKeys = detailKeys.filter(
+    (key) => selectedDetailKeyIds.includes(key.id) && key.status !== "SOLD"
   )
 
   const adjustSummaryCounts = (
@@ -313,6 +451,95 @@ export default function AdminCardKeysPage() {
     }
   }
 
+  const handleCopySelectedKeys = async () => {
+    if (selectedDetailKeys.length === 0) {
+      return
+    }
+
+    const text = selectedDetailKeys.map((key) => key.content).join("\n")
+
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+      } else if (typeof document !== "undefined") {
+        const textarea = document.createElement("textarea")
+        textarea.value = text
+        textarea.setAttribute("readonly", "true")
+        textarea.style.position = "fixed"
+        textarea.style.opacity = "0"
+        document.body.appendChild(textarea)
+        textarea.focus()
+        textarea.select()
+        document.execCommand("copy")
+        document.body.removeChild(textarea)
+      } else {
+        throw new Error("Clipboard unavailable")
+      }
+
+      toast.success(`已复制 ${selectedDetailKeys.length} 条卡密`)
+    } catch {
+      toast.error("复制失败，请检查浏览器复制权限")
+    }
+  }
+
+  const handleDeleteSelectedKeys = async () => {
+    if (!detailItem || selectedDetailKeys.length === 0) {
+      return
+    }
+    if (selectedSoldKeys.length > 0) {
+      toast.error("已售卡密不可删除，请取消选择后重试")
+      return
+    }
+    if (selectedDeletableKeys.length === 0) {
+      return
+    }
+
+    const confirmed = window.confirm(`确认删除选中的 ${selectedDeletableKeys.length} 条卡密吗？删除后无法恢复。`)
+    if (!confirmed) {
+      return
+    }
+
+    setSelectedDeleteProcessing(true)
+    try {
+      const result = await withMockFallback(
+        () => adminCardKeyApi.deleteSelected({ card_key_ids: selectedDeletableKeys.map((key) => key.id) }),
+        () => ({ deleted_count: selectedDeletableKeys.length })
+      )
+      toast.success(`已删除 ${result.deleted_count} 条卡密`)
+      setSelectedDetailKeyIds([])
+      await fetchStock()
+      await fetchDetailKeys(detailItem, detailPage)
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "删除卡密失败")
+    } finally {
+      setSelectedDeleteProcessing(false)
+    }
+  }
+
+  const handleQuickAddKeys = async () => {
+    if (!detailItem) {
+      return
+    }
+    if (!quickAddContent.trim()) {
+      toast.error("请输入要添加的卡密内容")
+      return
+    }
+
+    setQuickAdding(true)
+    try {
+      await submitCardImport({
+        mode: "quick-add",
+        productId: detailItem.product_id,
+        specId: detailItem.spec_id || null,
+        content: quickAddContent,
+      })
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "添加卡密失败")
+    } finally {
+      setQuickAdding(false)
+    }
+  }
+
   const handleSelectedAction = async () => {
     if (!selectedAction || !detailItem) return
     const targetIds = (selectedAction.type === "lock" ? selectedAvailableKeys : selectedLockedKeys).map((key) => key.id)
@@ -379,30 +606,12 @@ export default function AdminCardKeysPage() {
     }
     setImporting(true)
     try {
-      const result = await withMockFallback(
-        () => adminCardKeyApi.import({
-          product_id: importProductId,
-          spec_id: importSpecId || null,
-          content: importContent,
-        }),
-        () => ({
-          id: "mock-batch-" + Date.now(),
-          product_id: importProductId,
-          spec_id: importSpecId || null,
-          imported_by: "admin",
-          total_count: importContent.trim().split("\n").length,
-          success_count: importContent.trim().split("\n").length,
-          fail_count: 0,
-          fail_detail: null,
-          created_at: new Date().toISOString(),
-        })
-      )
-      toast.success(`导入成功：${result.success_count} 条${result.fail_count > 0 ? `，失败 ${result.fail_count} 条` : ""}`)
-      setShowImportModal(false)
-      setImportContent("")
-      setImportProductId("")
-      setImportSpecId("")
-      await Promise.all([fetchStock(), fetchImportBatches()])
+      await submitCardImport({
+        mode: "import",
+        productId: importProductId,
+        specId: importSpecId || null,
+        content: importContent,
+      })
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "导入失败")
     } finally {
@@ -699,12 +908,26 @@ export default function AdminCardKeysPage() {
       )}
 
       {/* Import Modal */}
-      <Modal open={showImportModal} onClose={() => setShowImportModal(false)} className="max-w-lg">
+      <Modal
+        open={showImportModal}
+        onClose={() => {
+          setShowImportModal(false)
+          if (pendingDuplicateDecision?.mode === "import") {
+            setPendingDuplicateDecision(null)
+          }
+        }}
+        className="max-w-lg"
+      >
             <div className="border-b border-border px-6 py-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground">{t("admin.batchImportKeys")}</h2>
               <button
                 type="button"
-                onClick={() => setShowImportModal(false)}
+                onClick={() => {
+                  setShowImportModal(false)
+                  if (pendingDuplicateDecision?.mode === "import") {
+                    setPendingDuplicateDecision(null)
+                  }
+                }}
                 className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
                 <X className="h-5 w-5" />
@@ -752,7 +975,7 @@ export default function AdminCardKeysPage() {
                   onChange={(e) => setImportContent(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  {t("admin.cardKeyContentHint")} {importContent.trim() ? importContent.trim().split("\n").length : 0} {t("admin.cardKeyContentUnit")}
+                  {t("admin.cardKeyContentHint")} {countImportLines(importContent)} {t("admin.cardKeyContentUnit")}
                 </p>
               </div>
             </div>
@@ -760,7 +983,12 @@ export default function AdminCardKeysPage() {
               <button
                 type="button"
                 className="rounded-lg border border-input bg-transparent px-4 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
-                onClick={() => setShowImportModal(false)}
+                onClick={() => {
+                  setShowImportModal(false)
+                  if (pendingDuplicateDecision?.mode === "import") {
+                    setPendingDuplicateDecision(null)
+                  }
+                }}
               >
                 {t("admin.cancel")}
               </button>
@@ -783,6 +1011,8 @@ export default function AdminCardKeysPage() {
           setSelectedDetailKeyIds([])
           setSelectedAction(null)
           setSelectedActionNote("")
+          setShowQuickAddModal(false)
+          setQuickAddContent("")
         }}
         className="max-w-[90vw] w-[1100px]"
       >
@@ -795,18 +1025,32 @@ export default function AdminCardKeysPage() {
               </p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setShowDetailModal(false)
-              setSelectedDetailKeyIds([])
-              setSelectedAction(null)
-              setSelectedActionNote("")
-            }}
-            className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {detailItem ? (
+              <button
+                type="button"
+                onClick={() => setShowQuickAddModal(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                按行添加卡密
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                setShowDetailModal(false)
+                setSelectedDetailKeyIds([])
+                setSelectedAction(null)
+                setSelectedActionNote("")
+                setShowQuickAddModal(false)
+                setQuickAddContent("")
+              }}
+              className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
         <div className="p-6">
           {detailLoading ? (
@@ -826,11 +1070,29 @@ export default function AdminCardKeysPage() {
                       checked={selectableDetailKeys.length > 0 && selectedDetailKeyIds.length === selectableDetailKeys.length}
                       onChange={toggleSelectAllDetailKeys}
                     />
-                    <span>全选本页可操作项</span>
+                    <span>全选本页卡密</span>
                   </label>
                   <span className="text-sm text-muted-foreground">已选 {selectedDetailKeyIds.length} 条</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500/10 px-3 py-1.5 text-xs font-medium text-sky-700 transition-colors hover:bg-sky-500/20 disabled:opacity-40"
+                    onClick={handleCopySelectedKeys}
+                    disabled={selectedDetailKeys.length === 0}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    复制选中卡密（{selectedDetailKeys.length}）
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-500/20 disabled:opacity-40"
+                    onClick={handleDeleteSelectedKeys}
+                    disabled={selectedDetailKeys.length === 0 || selectedDeleteProcessing}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {selectedDeleteProcessing ? "删除中..." : `删除选中卡密（${selectedDeletableKeys.length}）`}
+                  </button>
                   <button
                     type="button"
                     className="rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-500/20 disabled:opacity-40"
@@ -866,16 +1128,12 @@ export default function AdminCardKeysPage() {
                   {detailKeys.map((key) => (
                     <tr key={key.id} className="border-b border-border/50 last:border-0">
                       <td className="px-3 py-2 align-top">
-                        {key.status === "AVAILABLE" || key.status === "LOCKED" ? (
-                          <input
-                            type="checkbox"
-                            className="mt-0.5 h-4 w-4 rounded border-input"
-                            checked={selectedDetailKeyIds.includes(key.id)}
-                            onChange={() => toggleDetailSelection(key.id)}
-                          />
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 rounded border-input"
+                          checked={selectedDetailKeyIds.includes(key.id)}
+                          onChange={() => toggleDetailSelection(key.id)}
+                        />
                       </td>
                       <td className="px-3 py-2 font-mono text-xs text-foreground break-all">{key.content}</td>
                       <td className="px-3 py-2 align-top">
@@ -899,8 +1157,8 @@ export default function AdminCardKeysPage() {
                       <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
                         {new Date(key.created_at).toLocaleString()}
                       </td>
-                      <td className="px-3 py-2 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                        {key.order_id ? key.order_id.slice(0, 8) + "..." : "-"}
+                      <td className="px-3 py-2 font-mono text-xs text-muted-foreground break-all">
+                        {key.order_id || "-"}
                       </td>
                       <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
                         {key.sold_at ? new Date(key.sold_at).toLocaleString() : "-"}
@@ -956,6 +1214,162 @@ export default function AdminCardKeysPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal
+        open={pendingDuplicateDecision !== null}
+        onClose={() => {
+          if (!duplicateDecisionLoading) {
+            setPendingDuplicateDecision(null)
+          }
+        }}
+        className="max-w-2xl"
+      >
+        <div className="flex flex-col gap-4 p-6">
+          <div>
+            <h3 className="text-base font-semibold text-foreground">检测到重复卡密</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              本次新增内容里有 <span className="font-medium text-foreground">{pendingDuplicateDecision?.preview.duplicate_count ?? 0}</span> 条卡密已存在。
+              你可以选择覆盖旧记录，或跳过这些重复项。
+            </p>
+          </div>
+
+          {pendingDuplicateDecision?.preview.input_duplicate_count ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              本次粘贴内容里还有 {pendingDuplicateDecision.preview.input_duplicate_count} 条重复行，无论怎么选都会自动跳过这些重复行。
+            </div>
+          ) : null}
+
+          <div className="max-h-72 overflow-y-auto rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">卡密内容</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">当前状态</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">覆盖说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(pendingDuplicateDecision?.preview.duplicate_items ?? []).map((item) => (
+                  <tr key={item.content} className="border-b border-border/50 last:border-0">
+                    <td className="px-3 py-2 font-mono text-xs text-foreground break-all">{item.content}</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                      {item.status === "AVAILABLE"
+                        ? "可用"
+                        : item.status === "LOCKED"
+                          ? "锁定"
+                          : item.status === "SOLD"
+                            ? "已售"
+                            : "已作废"}
+                      {item.existing_count > 1 ? `（${item.existing_count} 条）` : ""}
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      {item.can_overwrite ? (
+                        <span className="text-emerald-600">可覆盖</span>
+                      ) : (
+                        <span className="text-red-500">{item.reason || "不可覆盖"}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              className="rounded-lg border border-input bg-transparent px-4 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+              onClick={() => setPendingDuplicateDecision(null)}
+              disabled={duplicateDecisionLoading !== null}
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-input bg-transparent px-4 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+              onClick={() => handleResolveDuplicateImport("skip")}
+              disabled={duplicateDecisionLoading !== null}
+            >
+              {duplicateDecisionLoading === "skip" ? "处理中..." : "跳过重复项"}
+            </button>
+            <button
+              type="button"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+              onClick={() => handleResolveDuplicateImport("overwrite")}
+              disabled={duplicateDecisionLoading !== null}
+            >
+              {duplicateDecisionLoading === "overwrite" ? "处理中..." : "覆盖重复项"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Quick Add Modal */}
+      <Modal
+        open={showQuickAddModal}
+        onClose={() => {
+          setShowQuickAddModal(false)
+          setQuickAddContent("")
+          if (pendingDuplicateDecision?.mode === "quick-add") {
+            setPendingDuplicateDecision(null)
+          }
+        }}
+        className="max-w-lg"
+      >
+        <div className="flex flex-col gap-4 p-6">
+          <div>
+            <h3 className="text-base font-semibold text-foreground">按行添加卡密</h3>
+            {detailItem ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                将为「{detailItem.product_title}{detailItem.spec_name ? ` — ${detailItem.spec_name}` : ""}」直接新增卡密，一行一条。
+              </p>
+            ) : null}
+          </div>
+          {detailItem ? (
+            <div className="rounded-lg border border-border bg-muted/20 p-3">
+              <p className="text-xs text-muted-foreground">当前目标</p>
+              <p className="mt-1 text-sm font-medium text-foreground">
+                {detailItem.product_title}{detailItem.spec_name ? ` — ${detailItem.spec_name}` : ""}
+              </p>
+            </div>
+          ) : null}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-foreground">卡密内容</label>
+            <textarea
+              className="min-h-32 rounded-lg border border-input bg-background px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              placeholder={"一行一条卡密，例如：\n账号----密码\n账号----密码----附加信息"}
+              value={quickAddContent}
+              onChange={(e) => setQuickAddContent(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              将新增 {countImportLines(quickAddContent)} 条
+            </p>
+          </div>
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              className="rounded-lg border border-input bg-transparent px-4 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
+              onClick={() => {
+                setShowQuickAddModal(false)
+                setQuickAddContent("")
+                if (pendingDuplicateDecision?.mode === "quick-add") {
+                  setPendingDuplicateDecision(null)
+                }
+              }}
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+              onClick={handleQuickAddKeys}
+              disabled={quickAdding}
+            >
+              {quickAdding ? "添加中..." : "确认添加"}
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* Single Lock Modal */}

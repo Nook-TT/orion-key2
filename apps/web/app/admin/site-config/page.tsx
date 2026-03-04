@@ -9,7 +9,7 @@ import { mockSiteConfigKVs } from "@/lib/mock-data"
 import { useLocale } from "@/lib/context"
 import type { SiteConfigKV } from "@/types"
 
-type TabKey = "basic" | "announcement" | "points" | "contact" | "maintenance"
+type TabKey = "basic" | "announcement" | "points" | "contact" | "mail" | "maintenance"
 
 export default function AdminSiteConfigPage() {
   const { t } = useLocale()
@@ -108,6 +108,7 @@ export default function AdminSiteConfigPage() {
           { key: "announcement" as const, label: t("admin.announcementTab") },
           { key: "points" as const, label: t("admin.pointsSettings") },
           { key: "contact" as const, label: t("admin.contactTab") },
+          { key: "mail" as const, label: t("admin.mailTab") },
           { key: "maintenance" as const, label: t("admin.maintenanceTab") },
         ]).map((tabItem) => (
           <button
@@ -141,14 +142,13 @@ export default function AdminSiteConfigPage() {
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-foreground">{t("admin.siteSlogan")}</label>
-              <input
-                type="text"
-                className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              <textarea
+                className="min-h-20 rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 value={getValue("site_slogan")}
                 onChange={(e) => setValue("site_slogan", e.target.value)}
                 placeholder="Unlock Your AI Potential"
               />
-              <p className="text-xs text-muted-foreground">{t("admin.siteSloganHint")}</p>
+              <p className="text-xs text-muted-foreground">{t("admin.siteSloganHint")} 支持基础 HTML，如 &lt;strong&gt;、&lt;br&gt;、&lt;a&gt;。</p>
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-foreground">{t("admin.siteDesc")}</label>
@@ -157,7 +157,7 @@ export default function AdminSiteConfigPage() {
                 value={getValue("site_description")}
                 onChange={(e) => setValue("site_description", e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">{t("admin.siteDescHint")}</p>
+              <p className="text-xs text-muted-foreground">{t("admin.siteDescHint")} 支持基础 HTML，如 &lt;strong&gt;、&lt;br&gt;、&lt;a&gt;。</p>
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-foreground">{t("admin.logoUrl")}</label>
@@ -240,12 +240,12 @@ export default function AdminSiteConfigPage() {
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-foreground">{t("admin.scrollAnnouncement")}</label>
-              <input
-                type="text"
-                className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              <textarea
+                className="min-h-20 rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 value={getValue("announcement")}
                 onChange={(e) => setValue("announcement", e.target.value)}
               />
+              <p className="text-xs text-muted-foreground">支持基础 HTML，如 &lt;strong&gt;、&lt;br&gt;、&lt;a&gt;。</p>
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-foreground">{t("admin.popupContent")}</label>
@@ -332,6 +332,122 @@ export default function AdminSiteConfigPage() {
                 onChange={(e) => setValue("contact_telegram", e.target.value)}
               />
             </div>
+            <button
+              type="button"
+              className="flex w-fit items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+              onClick={handleSave}
+              disabled={saving}
+            >
+              <Save className="h-4 w-4" />
+              {saving ? t("admin.saving") : t("admin.saveSettings")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Mail */}
+      {tab === "mail" && (
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+          <div className="flex flex-col gap-5 max-w-xl">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <p className="font-medium">{t("admin.mailHintTitle")}</p>
+              <p className="mt-1 text-xs leading-6 text-amber-800">
+                {t("admin.mailHintDesc")}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-foreground">{t("admin.mailEnabled")}</label>
+              <button
+                type="button"
+                className={cn(
+                  "relative h-6 w-11 rounded-full transition-colors",
+                  getBool("mail_enabled") ? "bg-primary" : "bg-muted"
+                )}
+                onClick={() => toggleBool("mail_enabled")}
+              >
+                <span className={cn(
+                  "absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform",
+                  getBool("mail_enabled") && "translate-x-5"
+                )} />
+              </button>
+            </div>
+
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <label className="text-sm font-medium text-foreground">{t("admin.mailSiteUrl")}</label>
+                <input
+                  type="url"
+                  className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="https://shop.52lo.com"
+                  value={getValue("mail_site_url")}
+                  onChange={(e) => setValue("mail_site_url", e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">{t("admin.mailSiteUrlHint")}</p>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-foreground">{t("admin.mailHost")}</label>
+                <input
+                  type="text"
+                  className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="smtp.gmail.com"
+                  value={getValue("mail_host")}
+                  onChange={(e) => setValue("mail_host", e.target.value)}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-foreground">{t("admin.mailPort")}</label>
+                <input
+                  type="number"
+                  className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="465"
+                  value={getValue("mail_port")}
+                  onChange={(e) => setValue("mail_port", e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">{t("admin.mailPortHint")}</p>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-foreground">{t("admin.mailUsername")}</label>
+                <input
+                  type="email"
+                  className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="your@gmail.com"
+                  value={getValue("mail_username")}
+                  onChange={(e) => setValue("mail_username", e.target.value)}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-foreground">{t("admin.mailPassword")}</label>
+                <input
+                  type="password"
+                  className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder={t("admin.mailPasswordPlaceholder")}
+                  value={getValue("mail_password")}
+                  onChange={(e) => setValue("mail_password", e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">{t("admin.mailPasswordHint")}</p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-foreground">
+              <p className="font-medium">{t("admin.gmailGuideTitle")}</p>
+              <p className="mt-1 text-xs leading-6 text-muted-foreground">
+                {t("admin.gmailGuideDesc")}
+              </p>
+              <a
+                href="https://myaccount.google.com/apppasswords"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-flex text-sm font-medium text-primary hover:underline"
+              >
+                https://myaccount.google.com/apppasswords
+              </a>
+            </div>
+
             <button
               type="button"
               className="flex w-fit items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"

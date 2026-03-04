@@ -26,6 +26,8 @@ public interface AdminCardKeyService {
 
     int unlockSelectedCardKeys(List<UUID> ids);
 
+    int deleteSelectedCardKeys(List<UUID> ids);
+
     void invalidateCardKey(UUID id);
 
     int batchInvalidateCardKeys(UUID productId, UUID specId);

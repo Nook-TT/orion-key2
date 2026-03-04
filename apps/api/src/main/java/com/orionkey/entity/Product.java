@@ -26,6 +26,9 @@ public class Product extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String detailMd;
 
+    @Column(name = "delivery_note", columnDefinition = "TEXT")
+    private String deliveryNote;
+
     private String coverUrl;
 
     @Column(nullable = false, precision = 10, scale = 2)

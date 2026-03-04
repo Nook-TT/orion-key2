@@ -62,25 +62,99 @@ public class AdminCardKeyServiceImpl implements AdminCardKeyService {
         UUID productId = UUID.fromString((String) req.get("product_id"));
         UUID specId = req.get("spec_id") != null ? UUID.fromString((String) req.get("spec_id")) : null;
         String content = (String) req.get("content");
+        String duplicateAction = normalizeDuplicateAction((String) req.get("duplicate_action"));
 
         productRepository.findById(productId)
                 .filter(p -> p.getIsDeleted() == 0)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND, "商品不存在"));
 
-        String[] lines = content.split("\\r?\\n");
-        int total = 0, success = 0, fail = 0;
+        List<String> normalizedLines = new ArrayList<>();
+        LinkedHashSet<String> uniqueContents = new LinkedHashSet<>();
+        Set<String> requestSeen = new HashSet<>();
+        int total = 0;
+        int requestDuplicateCount = 0;
+
+        for (String line : content == null ? new String[0] : content.split("\\r?\\n")) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            normalizedLines.add(trimmed);
+            uniqueContents.add(trimmed);
+            total++;
+            if (!requestSeen.add(trimmed)) {
+                requestDuplicateCount++;
+            }
+        }
+
+        if (total == 0) {
+            throw new BusinessException(ErrorCode.CARD_KEY_FORMAT_ERROR, "卡密导入格式错误");
+        }
+
+        Map<String, List<CardKey>> existingByContent = new LinkedHashMap<>();
+        for (CardKey key : cardKeyRepository.findByProductIdAndContentIn(productId, new ArrayList<>(uniqueContents))) {
+            existingByContent.computeIfAbsent(key.getContent(), ignored -> new ArrayList<>()).add(key);
+        }
+
+        List<Map<String, Object>> duplicateItems = buildDuplicateItems(existingByContent);
+        if ("ask".equals(duplicateAction) && !duplicateItems.isEmpty()) {
+            Map<String, Object> preview = new LinkedHashMap<>();
+            preview.put("requires_duplicate_action", true);
+            preview.put("total_count", total);
+            preview.put("success_count", 0);
+            preview.put("fail_count", 0);
+            preview.put("fail_detail", null);
+            preview.put("duplicate_count", duplicateItems.size());
+            preview.put("duplicate_items", duplicateItems);
+            preview.put("input_duplicate_count", requestDuplicateCount);
+            return preview;
+        }
+
+        int success = 0;
+        int fail = 0;
+        int overwriteCount = 0;
+        int skippedDuplicateCount = 0;
         StringBuilder failDetail = new StringBuilder();
         List<CardKey> importedCardKeys = new ArrayList<>();
+        Set<String> importedContents = new HashSet<>();
 
-        for (String line : lines) {
-            String trimmed = line.trim();
-            if (trimmed.isEmpty()) continue;
-            total++;
-
-            if (cardKeyRepository.existsByContentAndProductId(trimmed, productId)) {
+        for (String trimmed : normalizedLines) {
+            if (!importedContents.add(trimmed)) {
                 fail++;
-                failDetail.append("重复: ").append(trimmed).append("\n");
+                failDetail.append("本次输入重复: ").append(trimmed).append("\n");
                 continue;
+            }
+
+            List<CardKey> duplicates = existingByContent.getOrDefault(trimmed, List.of());
+            if (!duplicates.isEmpty()) {
+                if ("skip".equals(duplicateAction)) {
+                    fail++;
+                    skippedDuplicateCount++;
+                    failDetail.append("跳过重复: ").append(trimmed).append("\n");
+                    continue;
+                }
+
+                if ("overwrite".equals(duplicateAction)) {
+                    CardKey reusable = findReusableDuplicate(duplicates);
+                    if (reusable == null) {
+                        fail++;
+                        skippedDuplicateCount++;
+                        failDetail.append(buildOverwriteBlockedMessage(trimmed, duplicates)).append("\n");
+                        continue;
+                    }
+
+                    reusable.setSpecId(specId);
+                    reusable.setStatus(CardKeyStatus.AVAILABLE);
+                    reusable.setLockNote(null);
+                    reusable.setOrderId(null);
+                    reusable.setOrderItemId(null);
+                    reusable.setSoldAt(null);
+                    cardKeyRepository.save(reusable);
+                    importedCardKeys.add(reusable);
+                    success++;
+                    overwriteCount++;
+                    continue;
+                }
             }
 
             CardKey key = new CardKey();
@@ -91,10 +165,6 @@ public class AdminCardKeyServiceImpl implements AdminCardKeyService {
             cardKeyRepository.save(key);
             importedCardKeys.add(key);
             success++;
-        }
-
-        if (total == 0) {
-            throw new BusinessException(ErrorCode.CARD_KEY_FORMAT_ERROR, "卡密导入格式错误");
         }
 
         CardImportBatch batch = new CardImportBatch();
@@ -122,6 +192,9 @@ public class AdminCardKeyServiceImpl implements AdminCardKeyService {
         result.put("success_count", batch.getSuccessCount());
         result.put("fail_count", batch.getFailCount());
         result.put("fail_detail", batch.getFailDetail());
+        result.put("overwrite_count", overwriteCount);
+        result.put("skipped_duplicate_count", skippedDuplicateCount);
+        result.put("input_duplicate_count", requestDuplicateCount);
         result.put("created_at", batch.getCreatedAt());
         return result;
     }
@@ -210,6 +283,19 @@ public class AdminCardKeyServiceImpl implements AdminCardKeyService {
             key.setStatus(CardKeyStatus.AVAILABLE);
         }
         cardKeyRepository.saveAll(keys);
+        return keys.size();
+    }
+
+    @Override
+    @Transactional
+    public int deleteSelectedCardKeys(List<UUID> ids) {
+        List<CardKey> keys = requireExistingCardKeys(ids);
+        for (CardKey key : keys) {
+            if (key.getStatus() == CardKeyStatus.SOLD) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "已售卡密不可删除");
+            }
+        }
+        cardKeyRepository.deleteAll(keys);
         return keys.size();
     }
 
@@ -321,5 +407,67 @@ public class AdminCardKeyServiceImpl implements AdminCardKeyService {
             throw new BusinessException(ErrorCode.NOT_FOUND, "部分卡密不存在或已被删除");
         }
         return keys;
+    }
+
+    private List<Map<String, Object>> buildDuplicateItems(Map<String, List<CardKey>> existingByContent) {
+        List<Map<String, Object>> duplicateItems = new ArrayList<>();
+        for (Map.Entry<String, List<CardKey>> entry : existingByContent.entrySet()) {
+            List<CardKey> duplicates = entry.getValue();
+            CardKey reusable = findReusableDuplicate(duplicates);
+            CardKey previewKey = duplicates.get(0);
+
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("content", entry.getKey());
+            item.put("status", previewKey.getStatus().name());
+            item.put("existing_count", duplicates.size());
+            item.put("can_overwrite", reusable != null);
+            if (reusable == null) {
+                item.put("reason", overwriteBlockedReason(duplicates));
+            }
+            duplicateItems.add(item);
+        }
+        return duplicateItems;
+    }
+
+    private CardKey findReusableDuplicate(List<CardKey> duplicates) {
+        if (duplicates == null || duplicates.isEmpty()) {
+            return null;
+        }
+        if (duplicates.size() > 1) {
+            return null;
+        }
+        CardKey candidate = duplicates.get(0);
+        if (candidate.getStatus() == CardKeyStatus.SOLD) {
+            return null;
+        }
+        return candidate;
+    }
+
+    private String buildOverwriteBlockedMessage(String content, List<CardKey> duplicates) {
+        return overwriteBlockedReason(duplicates) + ": " + content;
+    }
+
+    private String overwriteBlockedReason(List<CardKey> duplicates) {
+        if (duplicates == null || duplicates.isEmpty()) {
+            return "无法自动覆盖";
+        }
+        if (duplicates.size() > 1) {
+            return "重复记录超过 1 条，无法自动覆盖";
+        }
+        if (duplicates.get(0).getStatus() == CardKeyStatus.SOLD) {
+            return "已售卡密不可覆盖";
+        }
+        return "无法自动覆盖";
+    }
+
+    private String normalizeDuplicateAction(String action) {
+        if (action == null || action.isBlank()) {
+            return "ask";
+        }
+        String normalized = action.trim().toLowerCase(Locale.ROOT);
+        if (!Set.of("ask", "skip", "overwrite").contains(normalized)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "不支持的重复处理方式");
+        }
+        return normalized;
     }
 }

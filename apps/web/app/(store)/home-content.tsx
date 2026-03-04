@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 import { useLocale, useSearch } from "@/lib/context"
 import { ProductCard } from "@/components/store/product-card"
+import { sanitizeConfigHtml } from "@/lib/html"
 import { cn } from "@/lib/utils"
 import type { ProductCard as ProductCardType, Category } from "@/types"
 
@@ -23,6 +24,8 @@ interface HomeContentProps {
 export function HomeContent({ products, categories, siteSlogan, siteDescription }: HomeContentProps) {
   const { t } = useLocale()
   const { searchQuery, sortBy, inStockOnly, priceMin, priceMax } = useSearch()
+  const sloganHtml = sanitizeConfigHtml(siteSlogan)
+  const descriptionHtml = sanitizeConfigHtml(siteDescription)
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
 
@@ -81,13 +84,15 @@ export function HomeContent({ products, categories, siteSlogan, siteDescription 
         <div className="scheme-blob pointer-events-none absolute -left-10 -top-10 h-48 w-64 rounded-full blur-3xl" />
         <div className="scheme-blob pointer-events-none absolute -right-16 bottom-0 h-32 w-48 rounded-full blur-3xl opacity-60" />
         <h1 className="relative text-balance text-2xl font-extrabold tracking-tight sm:text-3xl">
-          <span className="scheme-gradient-text">
-            {siteSlogan}
-          </span>
+          <span
+            className="scheme-gradient-text"
+            dangerouslySetInnerHTML={{ __html: sloganHtml }}
+          />
         </h1>
-        <p className="relative mt-3 text-sm text-muted-foreground">
-          {siteDescription}
-        </p>
+        <p
+          className="relative mt-3 text-sm text-muted-foreground"
+          dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+        />
       </section>
 
       {/* Controls */}

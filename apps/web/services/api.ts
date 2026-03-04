@@ -23,6 +23,7 @@ import type {
   CardKeyStockSummary,
   CardKeyListItem,
   CardImportBatch,
+  CardImportResult,
   OrderCardKey,
   AdminUserItem,
   AdminOrderItem,
@@ -310,7 +311,7 @@ export const orderApi = {
   createFromCart: (data: CreateCartOrderRequest) =>
     request<CreateOrderResult>("/orders/from-cart", { method: "POST", body: JSON.stringify(data) }),
   getStatus: (orderId: string) =>
-    request<{ order_id: string; status: OrderStatus; expires_at: string; remaining_seconds: number; payment_url?: string }>(`/orders/${orderId}/status`),
+    request<{ order_id: string; actual_amount: number; status: OrderStatus; expires_at: string; remaining_seconds: number; payment_url?: string }>(`/orders/${orderId}/status`),
   refreshStatus: (orderId: string) =>
     request<{ status: OrderStatus }>(`/orders/${orderId}/refresh`, { method: "POST" }),
   query: (data: { order_ids?: string[]; emails?: string[] }) =>
@@ -375,15 +376,15 @@ export const adminProductApi = {
   getDetail: (id: string) =>
     request<ProductDetail>(`/admin/products/${id}`),
   create: (data: {
-    title: string; description?: string; detail_md?: string; cover_url?: string;
-    base_price: number; category_id: string; low_stock_threshold?: number;
-    wholesale_enabled?: boolean; is_enabled?: boolean; sort_order?: number
+    title: string; description?: string; detail_md?: string; delivery_note?: string; cover_url?: string;
+    base_price: number; category_id: string; currency?: string; low_stock_threshold?: number;
+    wholesale_enabled?: boolean; is_enabled?: boolean; initial_sales?: number; sort_order?: number; delivery_type?: string
   }) =>
     request<ProductDetail>("/admin/products", { method: "POST", body: JSON.stringify(data) }),
   update: (id: string, data: Partial<{
-    title: string; description: string; detail_md: string; cover_url: string;
-    base_price: number; category_id: string; low_stock_threshold: number;
-    wholesale_enabled: boolean; is_enabled: boolean; sort_order: number
+    title: string; description: string; detail_md: string; delivery_note: string; cover_url: string;
+    base_price: number; category_id: string; currency: string; low_stock_threshold: number;
+    wholesale_enabled: boolean; is_enabled: boolean; initial_sales: number; sort_order: number; delivery_type: string
   }>) =>
     request<null>(`/admin/products/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   delete: (id: string) =>
@@ -438,8 +439,8 @@ export const adminCardKeyApi = {
     const qs = buildQuery(params ?? {})
     return request<CardKeyStockSummary[]>(`/admin/card-keys/stock?${qs}`)
   },
-  import: (data: { product_id: string; spec_id?: string | null; content: string }) =>
-    request<CardImportBatch>("/admin/card-keys/import", { method: "POST", body: JSON.stringify(data) }),
+  import: (data: { product_id: string; spec_id?: string | null; content: string; duplicate_action?: "ask" | "skip" | "overwrite" }) =>
+    request<CardImportResult>("/admin/card-keys/import", { method: "POST", body: JSON.stringify(data) }),
   getImportBatches: (params: { product_id?: string; page?: number; page_size?: number }) => {
     const qs = buildQuery(params)
     return request<PaginatedData<CardImportBatch>>(`/admin/card-keys/import-batches?${qs}`)
@@ -474,6 +475,11 @@ export const adminCardKeyApi = {
     }),
   unlockSelected: (data: { card_key_ids: string[] }) =>
     request<{ unlocked_count: number }>("/admin/card-keys/unlock-selected", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteSelected: (data: { card_key_ids: string[] }) =>
+    request<{ deleted_count: number }>("/admin/card-keys/delete-selected", {
       method: "POST",
       body: JSON.stringify(data),
     }),

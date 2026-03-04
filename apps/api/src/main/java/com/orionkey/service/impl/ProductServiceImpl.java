@@ -61,6 +61,7 @@ public class ProductServiceImpl implements ProductService {
                 .filter(p -> p.getIsDeleted() == 0)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND, "商品不存在"));
         Map<String, Object> detail = toProductDetail(product);
+        detail.put("delivery_note", product.getDeliveryNote());
         detail.put("is_enabled", product.isEnabled());
         detail.put("sort_order", product.getSortOrder());
         detail.put("low_stock_threshold", product.getLowStockThreshold());
@@ -80,6 +81,7 @@ public class ProductServiceImpl implements ProductService {
         }
         var list = productPage.getContent().stream().map(p -> {
             Map<String, Object> detail = toProductDetail(p);
+            detail.put("delivery_note", p.getDeliveryNote());
             detail.put("is_enabled", p.isEnabled());
             detail.put("sort_order", p.getSortOrder());
             detail.put("low_stock_threshold", p.getLowStockThreshold());
@@ -98,6 +100,7 @@ public class ProductServiceImpl implements ProductService {
         product.setTitle((String) req.get("title"));
         product.setDescription((String) req.get("description"));
         product.setDetailMd((String) req.get("detail_md"));
+        product.setDeliveryNote((String) req.get("delivery_note"));
         product.setCoverUrl((String) req.get("cover_url"));
         product.setBasePrice(new BigDecimal(req.get("base_price").toString()));
         if (req.containsKey("currency")) product.setCurrency((String) req.get("currency"));
@@ -109,7 +112,9 @@ public class ProductServiceImpl implements ProductService {
         if (req.containsKey("initial_sales")) product.setInitialSales(((Number) req.get("initial_sales")).intValue());
         if (req.containsKey("sort_order")) product.setSortOrder(((Number) req.get("sort_order")).intValue());
         productRepository.save(product);
-        return toProductDetail(product);
+        Map<String, Object> detail = toProductDetail(product);
+        detail.put("delivery_note", product.getDeliveryNote());
+        return detail;
     }
 
     @Override
@@ -121,6 +126,7 @@ public class ProductServiceImpl implements ProductService {
         if (req.containsKey("title")) product.setTitle((String) req.get("title"));
         if (req.containsKey("description")) product.setDescription((String) req.get("description"));
         if (req.containsKey("detail_md")) product.setDetailMd((String) req.get("detail_md"));
+        if (req.containsKey("delivery_note")) product.setDeliveryNote((String) req.get("delivery_note"));
         if (req.containsKey("cover_url")) product.setCoverUrl((String) req.get("cover_url"));
         if (req.containsKey("base_price")) product.setBasePrice(new BigDecimal(req.get("base_price").toString()));
         if (req.containsKey("currency")) product.setCurrency((String) req.get("currency"));

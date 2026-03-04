@@ -212,9 +212,9 @@ export default function AdminOrdersPage() {
                 orders.map((order) => (
                   <tr key={order.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-xs font-medium text-foreground">
-                          {order.id.length > 16 ? `${order.id.slice(0, 8)}...${order.id.slice(-4)}` : order.id}
+                      <div className="flex items-start gap-1.5">
+                        <span className="font-mono text-xs font-medium text-foreground break-all">
+                          {order.id}
                         </span>
                         {order.is_risk_flagged && (
                           <span className="rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-500">{t("admin.riskFlagged")}</span>

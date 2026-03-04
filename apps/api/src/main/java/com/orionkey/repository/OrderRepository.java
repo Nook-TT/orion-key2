@@ -6,6 +6,7 @@ import com.orionkey.entity.Order;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -76,4 +77,9 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
                                          @Param("isRiskFlagged") Boolean isRiskFlagged,
                                          @Param("keywordPattern") String keywordPattern,
                                          Pageable pageable);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE Order o SET o.status = com.orionkey.constant.OrderStatus.PAID, o.paidAt = :paidAt " +
+            "WHERE o.id = :orderId AND o.status = com.orionkey.constant.OrderStatus.PENDING")
+    int markPaidIfPending(@Param("orderId") UUID orderId, @Param("paidAt") LocalDateTime paidAt);
 }

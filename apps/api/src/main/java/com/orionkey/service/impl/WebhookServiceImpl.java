@@ -16,6 +16,7 @@ import com.orionkey.service.EpayService;
 import com.orionkey.service.WebhookService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -66,24 +67,14 @@ public class WebhookServiceImpl implements WebhookService {
 
             Order order = orderRepository.findById(orderId).orElse(null);
             if (order != null) {
-                if (order.getStatus() == OrderStatus.PENDING) {
-                    order.setStatus(OrderStatus.PAID);
-                    order.setPaidAt(LocalDateTime.now());
-                    orderRepository.save(order);
-                    Map<String, Object> deliverResult = deliverService.deliverOrderSystem(orderId);
-                    event.setProcessResult("SUCCESS_" + deliverResult.get("status"));
-                    log.info("Order marked as {} via webhook: {}", deliverResult.get("status"), orderId);
-                } else {
-                    event.setProcessResult("SKIPPED_" + order.getStatus().name());
-                    log.info("Order already {}: {}", order.getStatus(), orderId);
-                }
+                event.setProcessResult(markOrderPaidAndDeliver(orderId, "Webhook"));
             } else {
                 event.setProcessResult("ORDER_NOT_FOUND");
                 log.warn("Webhook order not found: {}", orderId);
             }
         }
 
-        webhookEventRepository.save(event);
+        saveWebhookEvent(event);
         return "OK";
     }
 
@@ -124,9 +115,10 @@ public class WebhookServiceImpl implements WebhookService {
             WebhookEvent event = new WebhookEvent();
             event.setEventId(eventId);
             event.setChannelCode("epay");
+            event.setOrderId(orderId);
             event.setPayload(params.toString());
             event.setProcessResult("SIGN_VERIFY_FAIL");
-            webhookEventRepository.save(event);
+            saveWebhookEvent(event);
             return "FAIL";
         }
 
@@ -136,9 +128,10 @@ public class WebhookServiceImpl implements WebhookService {
             WebhookEvent event = new WebhookEvent();
             event.setEventId(eventId);
             event.setChannelCode("epay");
+            event.setOrderId(orderId);
             event.setPayload(params.toString());
             event.setProcessResult("SKIPPED_" + tradeStatus);
-            webhookEventRepository.save(event);
+            saveWebhookEvent(event);
             return "SUCCESS";
         }
 
@@ -153,7 +146,7 @@ public class WebhookServiceImpl implements WebhookService {
         if (order == null) {
             event.setProcessResult("ORDER_NOT_FOUND");
             log.warn("Epay callback order not found: {}", orderId);
-            webhookEventRepository.save(event);
+            saveWebhookEvent(event);
             return "SUCCESS";
         }
 
@@ -163,26 +156,50 @@ public class WebhookServiceImpl implements WebhookService {
             if (order.getActualAmount().compareTo(callbackAmount) != 0) {
                 log.error("Epay callback amount mismatch: order={}, callback={}", order.getActualAmount(), callbackAmount);
                 event.setProcessResult("AMOUNT_MISMATCH");
-                webhookEventRepository.save(event);
+                saveWebhookEvent(event);
                 return "SUCCESS";
             }
         }
 
-        // Step 7: Idempotent update order status
-        if (order.getStatus() == OrderStatus.PENDING) {
-            order.setStatus(OrderStatus.PAID);
-            order.setPaidAt(LocalDateTime.now());
-            orderRepository.save(order);
+        // Step 7: Atomically move PENDING -> PAID, then deliver once
+        event.setProcessResult(markOrderPaidAndDeliver(orderId, "Epay callback"));
+
+        saveWebhookEvent(event);
+        return "SUCCESS";
+    }
+
+    private String markOrderPaidAndDeliver(UUID orderId, String source) {
+        int updated = orderRepository.markPaidIfPending(orderId, LocalDateTime.now());
+        if (updated > 0) {
             Map<String, Object> deliverResult = deliverService.deliverOrderSystem(orderId);
-            event.setProcessResult("SUCCESS_" + deliverResult.get("status"));
-            log.info("Epay callback: order {} marked as {}", orderId, deliverResult.get("status"));
-        } else {
-            event.setProcessResult("SKIPPED_" + order.getStatus().name());
-            log.info("Epay callback: order {} already {}", orderId, order.getStatus());
+            String status = String.valueOf(deliverResult.get("status"));
+            log.info("{}: order {} marked as {}", source, orderId, status);
+            return "SUCCESS_" + status;
         }
 
-        webhookEventRepository.save(event);
-        return "SUCCESS";
+        Order latestOrder = orderRepository.findById(orderId).orElse(null);
+        if (latestOrder == null) {
+            log.warn("{}: order not found after atomic update attempt: {}", source, orderId);
+            return "ORDER_NOT_FOUND";
+        }
+
+        log.info("{}: order {} already {}", source, orderId, latestOrder.getStatus());
+        return "SKIPPED_" + latestOrder.getStatus().name();
+    }
+
+    private void saveWebhookEvent(WebhookEvent event) {
+        try {
+            webhookEventRepository.save(event);
+        } catch (DataIntegrityViolationException e) {
+            String message = e.getMostSpecificCause() != null
+                    ? e.getMostSpecificCause().getMessage()
+                    : e.getMessage();
+            if (message != null && (message.contains("event_id") || message.contains("ukpl27si525rrtp7yhrks75p68b"))) {
+                log.info("Webhook event already recorded concurrently: {}", event.getEventId());
+                return;
+            }
+            throw e;
+        }
     }
 
     /**

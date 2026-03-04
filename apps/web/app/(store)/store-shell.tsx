@@ -6,6 +6,7 @@ import { Wrench, Mail } from "lucide-react"
 import { StoreHeader } from "@/components/layout/store-header"
 import { StoreFooter } from "@/components/layout/store-footer"
 import { VisitTracker } from "@/components/store/visit-tracker"
+import { sanitizeConfigHtml } from "@/lib/html"
 import { useSiteConfig, useAuth, useLocale } from "@/lib/context"
 
 function AnnouncementBar() {
@@ -13,11 +14,13 @@ function AnnouncementBar() {
 
   if (!config?.announcement_enabled || !config.announcement) return null
 
+  const announcementHtml = sanitizeConfigHtml(config.announcement)
+
   return (
     <div className="overflow-hidden bg-primary/10 text-primary">
       <div className="animate-marquee whitespace-nowrap py-1.5 text-xs font-medium sm:text-sm">
-        <span className="mx-8">{config.announcement}</span>
-        <span className="mx-8">{config.announcement}</span>
+        <span className="mx-8 inline-block" dangerouslySetInnerHTML={{ __html: announcementHtml }} />
+        <span className="mx-8 inline-block" dangerouslySetInnerHTML={{ __html: announcementHtml }} />
       </div>
     </div>
   )

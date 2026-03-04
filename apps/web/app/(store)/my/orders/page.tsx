@@ -104,9 +104,9 @@ export default function MyOrdersPage() {
             >
               {/* Order Header */}
               <div className="mb-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs font-medium text-card-foreground">
-                    {order.id.length > 20 ? `${order.id.slice(0, 8)}...${order.id.slice(-8)}` : order.id}
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="min-w-0 break-all font-mono text-xs font-medium text-card-foreground">
+                    {order.id}
                   </span>
                   <OrderStatusBadge status={order.status} />
                 </div>

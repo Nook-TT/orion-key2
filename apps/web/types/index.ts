@@ -102,6 +102,7 @@ export interface ProductCard {
 /** Full product detail (returned by GET /products/{id}) */
 export interface ProductDetail extends ProductCard {
   detail_md?: string
+  delivery_note?: string
   specs: ProductSpec[]
   wholesale_enabled: boolean
   wholesale_rules: WholesaleRule[]
@@ -186,6 +187,7 @@ export interface DeliverResultGroup {
   product_title: string
   spec_name: string | null
   card_keys: string[]
+  delivery_note?: string | null
 }
 
 export interface DeliverResult {
@@ -368,6 +370,14 @@ export interface CardKeyListItem {
   sold_at: string | null
 }
 
+export interface CardImportDuplicateItem {
+  content: string
+  status: 'AVAILABLE' | 'LOCKED' | 'SOLD' | 'INVALID'
+  existing_count: number
+  can_overwrite: boolean
+  reason?: string | null
+}
+
 export interface CardImportBatch {
   id: string
   product_id: string
@@ -378,6 +388,24 @@ export interface CardImportBatch {
   fail_count: number
   fail_detail: string | null
   created_at: string
+}
+
+export interface CardImportResult {
+  id?: string
+  product_id?: string
+  spec_id?: string | null
+  imported_by?: string
+  total_count: number
+  success_count: number
+  fail_count: number
+  fail_detail: string | null
+  created_at?: string
+  overwrite_count?: number
+  skipped_duplicate_count?: number
+  input_duplicate_count?: number
+  requires_duplicate_action?: boolean
+  duplicate_count?: number
+  duplicate_items?: CardImportDuplicateItem[]
 }
 
 export interface OrderCardKey {

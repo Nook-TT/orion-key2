@@ -23,8 +23,8 @@ export function RecentOrders({ orders }: { orders: AdminOrderItem[] }) {
           <tbody>
             {orders.map((order) => (
               <tr key={order.id} className="border-b border-border/50 last:border-0">
-                <td className="py-3 font-mono text-xs text-foreground">
-                  {order.id.length > 20 ? `${order.id.slice(0, 8)}...${order.id.slice(-8)}` : order.id}
+                <td className="py-3 font-mono text-xs text-foreground break-all">
+                  {order.id}
                 </td>
                 <td className="py-3 text-foreground">{order.username || order.email}</td>
                 <td className="py-3 font-medium text-foreground">¥{order.actual_amount.toFixed(2)}</td>

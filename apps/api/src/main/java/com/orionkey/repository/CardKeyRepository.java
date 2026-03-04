@@ -32,6 +32,8 @@ public interface CardKeyRepository extends JpaRepository<CardKey, UUID> {
 
     boolean existsByContentAndProductId(String content, UUID productId);
 
+    List<CardKey> findByProductIdAndContentIn(UUID productId, List<String> contents);
+
     @Query("SELECT ck FROM CardKey ck WHERE ck.productId = :productId " +
             "AND ((:specId IS NULL AND ck.specId IS NULL) OR ck.specId = :specId) " +
             "ORDER BY ck.createdAt DESC")

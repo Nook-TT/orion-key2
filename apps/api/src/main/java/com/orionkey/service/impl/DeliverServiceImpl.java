@@ -31,6 +31,7 @@ public class DeliverServiceImpl implements DeliverService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final CardKeyRepository cardKeyRepository;
+    private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final PointsLogRepository pointsLogRepository;
     private final SiteConfigRepository siteConfigRepository;
@@ -199,7 +200,7 @@ public class DeliverServiceImpl implements DeliverService {
 
         List<CardKey> keys = cardKeyRepository.findByOrderId(orderId);
         List<OrderItem> items = orderItemRepository.findByOrderId(orderId);
-        Map<UUID, OrderItem> itemMap = items.stream().collect(Collectors.toMap(OrderItem::getId, i -> i));
+        Map<UUID, String> deliveryNoteMap = buildDeliveryNoteMap(items);
 
         StringBuilder sb = new StringBuilder();
         sb.append("订单号: ").append(orderId).append("\n");
@@ -209,17 +210,24 @@ public class DeliverServiceImpl implements DeliverService {
                 .filter(k -> k.getOrderItemId() != null)
                 .collect(Collectors.groupingBy(CardKey::getOrderItemId));
 
-        for (Map.Entry<UUID, List<CardKey>> entry : grouped.entrySet()) {
-            OrderItem item = itemMap.get(entry.getKey());
-            if (item != null) {
-                sb.append("商品: ").append(item.getProductTitle());
-                if (item.getSpecName() != null) sb.append(" [").append(item.getSpecName()).append("]");
-                sb.append("\n");
-                for (CardKey key : entry.getValue()) {
+        for (OrderItem item : items) {
+            List<CardKey> itemKeys = grouped.get(item.getId());
+            String deliveryNote = normalizeDeliveryNote(deliveryNoteMap.get(item.getProductId()));
+            if ((itemKeys == null || itemKeys.isEmpty()) && deliveryNote == null) {
+                continue;
+            }
+            sb.append("商品: ").append(item.getProductTitle());
+            if (item.getSpecName() != null) sb.append(" [").append(item.getSpecName()).append("]");
+            sb.append("\n");
+            if (deliveryNote != null) {
+                sb.append("发货附言:\n").append(deliveryNote).append("\n");
+            }
+            if (itemKeys != null) {
+                for (CardKey key : itemKeys) {
                     sb.append(key.getContent()).append("\n");
                 }
-                sb.append("\n");
             }
+            sb.append("\n");
         }
         return sb.toString();
     }
@@ -234,26 +242,50 @@ public class DeliverServiceImpl implements DeliverService {
     }
 
     private List<Map<String, Object>> buildCardKeyGroups(UUID orderId) {
-        List<CardKey> keys = cardKeyRepository.findByOrderId(orderId);
         List<OrderItem> items = orderItemRepository.findByOrderId(orderId);
-        Map<UUID, OrderItem> itemMap = items.stream().collect(Collectors.toMap(OrderItem::getId, i -> i));
+        Map<UUID, String> deliveryNoteMap = buildDeliveryNoteMap(items);
+        List<CardKey> keys = cardKeyRepository.findByOrderId(orderId);
 
         Map<UUID, List<CardKey>> grouped = keys.stream()
                 .filter(k -> k.getOrderItemId() != null)
                 .collect(Collectors.groupingBy(CardKey::getOrderItemId));
 
         List<Map<String, Object>> groups = new ArrayList<>();
-        for (Map.Entry<UUID, List<CardKey>> entry : grouped.entrySet()) {
-            OrderItem item = itemMap.get(entry.getKey());
-            if (item != null) {
-                Map<String, Object> g = new LinkedHashMap<>();
-                g.put("product_title", item.getProductTitle());
-                g.put("spec_name", item.getSpecName());
-                g.put("card_keys", entry.getValue().stream().map(CardKey::getContent).toList());
-                groups.add(g);
+        for (OrderItem item : items) {
+            List<CardKey> itemKeys = grouped.get(item.getId());
+            List<String> cardKeys = itemKeys == null ? List.of() : itemKeys.stream().map(CardKey::getContent).toList();
+            String deliveryNote = normalizeDeliveryNote(deliveryNoteMap.get(item.getProductId()));
+            if (cardKeys.isEmpty() && deliveryNote == null) {
+                continue;
             }
+            Map<String, Object> g = new LinkedHashMap<>();
+            g.put("product_title", item.getProductTitle());
+            g.put("spec_name", item.getSpecName());
+            g.put("card_keys", cardKeys);
+            g.put("delivery_note", deliveryNote);
+            groups.add(g);
         }
         return groups;
+    }
+
+    private Map<UUID, String> buildDeliveryNoteMap(List<OrderItem> items) {
+        List<UUID> productIds = items.stream()
+                .map(OrderItem::getProductId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (productIds.isEmpty()) {
+            return Map.of();
+        }
+        return productRepository.findAllById(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, Product::getDeliveryNote));
+    }
+
+    private String normalizeDeliveryNote(String deliveryNote) {
+        if (!StringUtils.hasText(deliveryNote)) {
+            return null;
+        }
+        return deliveryNote.trim();
     }
 
     private void awardPoints(Order order) {

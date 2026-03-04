@@ -1,20 +1,22 @@
-"use client"
-
 import React from "react"
-import { AdminSidebar } from "@/components/layout/admin-sidebar"
-import { useRequireAdmin } from "@/lib/hooks"
+import type { Metadata } from "next"
+import { AdminLayoutShell } from "@/components/layout/admin-layout-shell"
+import { getSiteConfig } from "@/services/api-server"
+
+export async function generateMetadata(): Promise<Metadata> {
+  try {
+    const config = await getSiteConfig()
+    const siteName = config.site_name?.trim()
+    return {
+      title: siteName ? `${siteName} 后台管理` : "后台管理",
+    }
+  } catch {
+    return {
+      title: "后台管理",
+    }
+  }
+}
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const user = useRequireAdmin()
-
-  if (!user) return null
-
-  return (
-    <div className="min-h-screen bg-background">
-      <AdminSidebar />
-      <main className="md:ml-60 min-h-screen">
-        <div className="p-6 lg:p-8">{children}</div>
-      </main>
-    </div>
-  )
+  return <AdminLayoutShell>{children}</AdminLayoutShell>
 }

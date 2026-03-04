@@ -218,6 +218,14 @@ mail:
   site-url: ${MAIL_SITE_URL:https://your-domain.com}
 ```
 
+Once SMTP is configured, the system sends delivered card keys to the email address provided on the order after automatic fulfillment completes.
+
+If you use Gmail:
+- Recommended `MAIL_HOST=smtp.gmail.com`
+- Recommended `MAIL_PORT=465`
+- Set `MAIL_PASSWORD` to Google's 16-character App Password, not your normal login password
+- Google App Passwords page: `https://myaccount.google.com/apppasswords`
+
 ### File Uploads
 
 ```yaml
@@ -293,9 +301,10 @@ PASSWORD_PLAIN=false
 
 # Email (set MAIL_ENABLED=false to disable)
 MAIL_ENABLED=true
-MAIL_HOST=smtp.example.com
-MAIL_USERNAME=your@email.com
-MAIL_PASSWORD=your_password
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=465
+MAIL_USERNAME=your@gmail.com
+MAIL_PASSWORD=your_16_char_app_password
 
 # Docker images (built by CI/CD, or specify manually)
 API_IMAGE=ghcr.io/your-org/orion-key-api:latest

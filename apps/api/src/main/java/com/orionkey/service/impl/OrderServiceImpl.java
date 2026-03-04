@@ -210,6 +210,7 @@ public class OrderServiceImpl implements OrderService {
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("order_id", order.getId());
+        result.put("actual_amount", order.getActualAmount());
         result.put("status", order.getStatus().name());
         result.put("expires_at", order.getExpiresAt());
         // 返回服务端计算的剩余秒数，前端倒计时以此为准，不受客户端时钟影响
