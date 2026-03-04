@@ -14,6 +14,18 @@ public interface AdminCardKeyService {
 
     PageResult<?> getImportBatches(UUID productId, int page, int pageSize);
 
+    void lockCardKey(UUID id, String note);
+
+    void unlockCardKey(UUID id);
+
+    int batchLockCardKeys(UUID productId, UUID specId, String note);
+
+    int batchUnlockCardKeys(UUID productId, UUID specId);
+
+    int lockSelectedCardKeys(List<UUID> ids, String note);
+
+    int unlockSelectedCardKeys(List<UUID> ids);
+
     void invalidateCardKey(UUID id);
 
     int batchInvalidateCardKeys(UUID productId, UUID specId);

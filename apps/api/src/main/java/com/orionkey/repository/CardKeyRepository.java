@@ -54,4 +54,15 @@ public interface CardKeyRepository extends JpaRepository<CardKey, UUID> {
                                          @Param("specId") UUID specId,
                                          @Param("oldStatus") CardKeyStatus oldStatus,
                                          @Param("newStatus") CardKeyStatus newStatus);
+
+    @Modifying
+    @Query("UPDATE CardKey ck SET ck.status = :newStatus, ck.lockNote = :lockNote " +
+            "WHERE ck.productId = :productId " +
+            "AND ((:specId IS NULL AND ck.specId IS NULL) OR ck.specId = :specId) " +
+            "AND ck.status = :oldStatus")
+    int updateStatusAndLockNoteByProductIdAndSpecId(@Param("productId") UUID productId,
+                                                    @Param("specId") UUID specId,
+                                                    @Param("oldStatus") CardKeyStatus oldStatus,
+                                                    @Param("newStatus") CardKeyStatus newStatus,
+                                                    @Param("lockNote") String lockNote);
 }

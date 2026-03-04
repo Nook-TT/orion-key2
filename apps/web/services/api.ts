@@ -444,6 +444,39 @@ export const adminCardKeyApi = {
     const qs = buildQuery(params)
     return request<PaginatedData<CardImportBatch>>(`/admin/card-keys/import-batches?${qs}`)
   },
+  lock: (id: string, note?: string | null) =>
+    request<null>(`/admin/card-keys/${id}/lock`, {
+      method: "POST",
+      body: JSON.stringify({ note: note?.trim() || null }),
+    }),
+  unlock: (id: string) =>
+    request<null>(`/admin/card-keys/${id}/unlock`, { method: "POST" }),
+  batchLock: (data: { product_id: string; spec_id?: string | null; note?: string | null }) =>
+    request<{ locked_count: number }>("/admin/card-keys/batch-lock", {
+      method: "POST",
+      body: JSON.stringify({
+        ...data,
+        note: data.note?.trim() || null,
+      }),
+    }),
+  batchUnlock: (data: { product_id: string; spec_id?: string | null }) =>
+    request<{ unlocked_count: number }>("/admin/card-keys/batch-unlock", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  lockSelected: (data: { card_key_ids: string[]; note?: string | null }) =>
+    request<{ locked_count: number }>("/admin/card-keys/lock-selected", {
+      method: "POST",
+      body: JSON.stringify({
+        ...data,
+        note: data.note?.trim() || null,
+      }),
+    }),
+  unlockSelected: (data: { card_key_ids: string[] }) =>
+    request<{ unlocked_count: number }>("/admin/card-keys/unlock-selected", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   invalidate: (id: string) =>
     request<null>(`/admin/card-keys/${id}/invalidate`, { method: "POST" }),
   batchInvalidate: (params: { product_id: string; spec_id?: string | null }) => {

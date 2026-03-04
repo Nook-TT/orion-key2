@@ -26,6 +26,9 @@ public class CardKey extends BaseEntity {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
+    @Column(columnDefinition = "TEXT")
+    private String lockNote;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private CardKeyStatus status = CardKeyStatus.AVAILABLE;

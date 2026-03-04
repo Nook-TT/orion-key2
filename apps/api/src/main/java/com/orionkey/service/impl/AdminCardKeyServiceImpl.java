@@ -140,6 +140,81 @@ public class AdminCardKeyServiceImpl implements AdminCardKeyService {
 
     @Override
     @Transactional
+    public void lockCardKey(UUID id, String note) {
+        CardKey key = cardKeyRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "卡密不存在"));
+        if (key.getStatus() != CardKeyStatus.AVAILABLE) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "仅可锁定可用状态的卡密");
+        }
+        key.setLockNote(normalizeLockNote(note));
+        key.setStatus(CardKeyStatus.LOCKED);
+        cardKeyRepository.save(key);
+    }
+
+    @Override
+    @Transactional
+    public void unlockCardKey(UUID id) {
+        CardKey key = cardKeyRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "卡密不存在"));
+        if (key.getStatus() != CardKeyStatus.LOCKED) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "仅可恢复已锁定的卡密");
+        }
+        key.setLockNote(null);
+        key.setStatus(CardKeyStatus.AVAILABLE);
+        cardKeyRepository.save(key);
+    }
+
+    @Override
+    @Transactional
+    public int batchLockCardKeys(UUID productId, UUID specId, String note) {
+        return cardKeyRepository.updateStatusAndLockNoteByProductIdAndSpecId(
+                productId, specId, CardKeyStatus.AVAILABLE, CardKeyStatus.LOCKED, normalizeLockNote(note));
+    }
+
+    @Override
+    @Transactional
+    public int batchUnlockCardKeys(UUID productId, UUID specId) {
+        return cardKeyRepository.updateStatusAndLockNoteByProductIdAndSpecId(
+                productId, specId, CardKeyStatus.LOCKED, CardKeyStatus.AVAILABLE, null);
+    }
+
+    @Override
+    @Transactional
+    public int lockSelectedCardKeys(List<UUID> ids, String note) {
+        List<CardKey> keys = requireExistingCardKeys(ids);
+        for (CardKey key : keys) {
+            if (key.getStatus() != CardKeyStatus.AVAILABLE) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "选中的卡密里存在不可锁定项");
+            }
+        }
+        String normalizedNote = normalizeLockNote(note);
+        for (CardKey key : keys) {
+            key.setLockNote(normalizedNote);
+            key.setStatus(CardKeyStatus.LOCKED);
+        }
+        cardKeyRepository.saveAll(keys);
+        return keys.size();
+    }
+
+    @Override
+    @Transactional
+    public int unlockSelectedCardKeys(List<UUID> ids) {
+        List<CardKey> keys = requireExistingCardKeys(ids);
+        for (CardKey key : keys) {
+            if (key.getStatus() != CardKeyStatus.LOCKED) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "选中的卡密里存在不可恢复项");
+            }
+        }
+        for (CardKey key : keys) {
+            key.setLockNote(null);
+            key.setStatus(CardKeyStatus.AVAILABLE);
+        }
+        cardKeyRepository.saveAll(keys);
+        return keys.size();
+    }
+
+    @Override
+    @Transactional
     public void invalidateCardKey(UUID id) {
         CardKey key = cardKeyRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "卡密不存在"));
@@ -186,6 +261,7 @@ public class AdminCardKeyServiceImpl implements AdminCardKeyService {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("id", k.getId());
             map.put("content", k.getContent());
+            map.put("lock_note", k.getLockNote());
             map.put("status", k.getStatus().name());
             map.put("order_id", k.getOrderId());
             map.put("created_at", k.getCreatedAt());
@@ -220,5 +296,30 @@ public class AdminCardKeyServiceImpl implements AdminCardKeyService {
         map.put("locked", locked);
         map.put("invalid", invalid);
         return map;
+    }
+
+    private String normalizeLockNote(String note) {
+        if (note == null) {
+            return null;
+        }
+        String trimmed = note.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        if (trimmed.length() > 200) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "锁定备注最多 200 个字符");
+        }
+        return trimmed;
+    }
+
+    private List<CardKey> requireExistingCardKeys(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "请至少选择一条卡密");
+        }
+        List<CardKey> keys = cardKeyRepository.findAllById(ids);
+        if (keys.size() != ids.size()) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "部分卡密不存在或已被删除");
+        }
+        return keys;
     }
 }

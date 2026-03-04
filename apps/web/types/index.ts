@@ -361,6 +361,7 @@ export interface CardKeyStockSummary {
 export interface CardKeyListItem {
   id: string
   content: string
+  lock_note?: string | null
   status: 'AVAILABLE' | 'LOCKED' | 'SOLD' | 'INVALID'
   order_id: string | null
   created_at: string

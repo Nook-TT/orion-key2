@@ -42,8 +42,12 @@ export default function OrderQueryPage() {
     } catch { /* empty */ }
     setRecentQueries(recent)
 
-    // Auto-query from URL params
-    const orderIdParam = searchParams.get("orderId")
+    // Auto-query from URL params.
+    // Epay returns `out_trade_no`, which is our order ID.
+    const orderIdParam =
+      searchParams.get("orderId") ||
+      searchParams.get("out_trade_no") ||
+      searchParams.get("outTradeNo")
     if (orderIdParam) {
       setQueryValue(orderIdParam)
       doSearch(orderIdParam, recent)
