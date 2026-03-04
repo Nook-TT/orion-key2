@@ -277,8 +277,14 @@ public class DeliverServiceImpl implements DeliverService {
         if (productIds.isEmpty()) {
             return Map.of();
         }
-        return productRepository.findAllById(productIds).stream()
-                .collect(Collectors.toMap(Product::getId, Product::getDeliveryNote));
+        Map<UUID, String> noteMap = new HashMap<>();
+        for (Product product : productRepository.findAllById(productIds)) {
+            String deliveryNote = normalizeDeliveryNote(product.getDeliveryNote());
+            if (deliveryNote != null) {
+                noteMap.put(product.getId(), deliveryNote);
+            }
+        }
+        return noteMap;
     }
 
     private String normalizeDeliveryNote(String deliveryNote) {
